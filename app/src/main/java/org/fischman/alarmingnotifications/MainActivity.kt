@@ -1,9 +1,12 @@
 package org.fischman.alarmingnotifications
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.IBinder
 import android.view.Menu
 import android.view.MenuItem
 import androidx.activity.ComponentActivity
@@ -29,11 +32,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.getSystemService
+import org.fischman.alarmingnotifications.gcal.TodaysEventsActivity
 
 class MainActivity : ComponentActivity() {
+    private var triggerAlarm: TriggerAlarm? = null
+    private var isBound=false
     private var resumeCallback: (() -> Unit)? = null
     private var contentAttached: Boolean = false
     private var permissionsInFlight: Boolean = false
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(className: ComponentName, service: IBinder) {
+            val binder = service as TriggerAlarm.AlarmBinder
+            triggerAlarm = binder.getService()
+            triggerAlarm!!.showNotification("test","teest")
+            isBound = true
+        }
+
+        override fun onServiceDisconnected(arg0: ComponentName) {
+            isBound = false
+            triggerAlarm = null
+        }
+    }
 
     private fun launchPermissionsActivityIfNeeded(): Boolean {
         if (permissionsInFlight) return false
@@ -50,6 +70,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         if (launchPermissionsActivityIfNeeded()) return
+        Intent(this, TriggerAlarm::class.java).also { intent ->
+        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+
+        }
 
         ensureContent()
     }
@@ -180,6 +204,16 @@ fun MainDashboard(
                     QuickMuteSection(context)
                     Spacer(modifier = Modifier.height(24.dp))
                     CustomMuteSection(context)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            context.startActivity(Intent(context, TodaysEventsActivity::class.java))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("View Today's Events", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

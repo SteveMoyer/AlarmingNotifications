@@ -4,12 +4,14 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <queries>
-      <intent>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-      </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
@@ -22,23 +24,21 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         tools:targetApi="31">
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
         <activity
             android:name=".PermissionsActivity"
             android:exported="false"
             android:label="Permissions"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
-
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
@@ -59,6 +59,16 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <service
+            android:name=".TriggerAlarm"
+            android:exported="true"></service>
+
+        <activity
+            android:name=".gcal.TodaysEventsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_todays_events"
+            android:theme="@style/Theme.AlarmingNotifications"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

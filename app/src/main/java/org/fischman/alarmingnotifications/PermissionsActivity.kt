@@ -59,6 +59,7 @@ internal enum class PermissionStep {
     SendNotifications,
     ReadNotifications,
     SetExactAlarms,
+    ReadCalendar,
 }
 
 internal data class PermissionStatus(
@@ -156,6 +157,12 @@ internal fun PermissionSetupScreen(
                                         context.startActivity(getExactAlarmSettingsIntent(context))
                                     }
                                 }
+                                PermissionStep.ReadCalendar -> {
+                                    if (Build.VERSION.SDK_INT >= 33) {
+                                        permissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+                                    }
+
+                                }
                                 null -> onComplete()
                             }
                         },
@@ -240,7 +247,6 @@ internal fun getPermissionStatuses(context: Context): List<PermissionStatus> {
         "Required so the app can detect eligible notifications from other apps.",
         enabledListeners?.contains(notificationListenerComponent(context)) == true
     )
-
     if (Build.VERSION.SDK_INT >= 31) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         statuses += PermissionStatus(
@@ -248,6 +254,15 @@ internal fun getPermissionStatuses(context: Context): List<PermissionStatus> {
             "Set exact alarms",
             "Required for reliable timing of snooze on an alarming notification.",
             alarmManager.canScheduleExactAlarms(),
+        )
+    }
+    if (Build.VERSION.SDK_INT >= 31) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        statuses += PermissionStatus(
+            PermissionStep.ReadCalendar,
+            "Read Calendar",
+            "Required so the app can read calendar events.",
+            context.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED,
         )
     }
 

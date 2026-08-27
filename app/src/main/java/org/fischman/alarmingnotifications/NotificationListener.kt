@@ -16,7 +16,7 @@ import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import kotlin.random.Random
+import androidx.core.content.getSystemService
 
 
 class NotificationListener : NotificationListenerService() {
@@ -92,7 +92,7 @@ class NotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        originalNotificationKeyToAlarmingID[sbn.key]?.let { dismiss(it, sbn.key) }
+        originalNotificationKeyToAlarmingID[sbn.key]?.let { getSystemService<TriggerAlarm>()!!.dismiss(it) }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -106,7 +106,7 @@ class NotificationListener : NotificationListenerService() {
             return
         }
 
-        // Other places that text can be stored in in Notifications. Possibly of future interest for apps other than GCal and GMail.
+        // Other places that text can be stored in Notifications. Possibly of future interest for apps other than GCal and GMail.
         if (0 > 1) {
             val textFields = mutableListOf(
                 Notification.EXTRA_TITLE,
@@ -165,191 +165,14 @@ class NotificationListener : NotificationListenerService() {
             return
         }
 
-        showNotification(label, sbn.key)
+        var notificationId = getSystemService<TriggerAlarm>()!!.showNotification(label, sbn.key)
+        this.originalNotificationKeyToAlarmingID[sbn.key] =
+            notificationId
     }
 
-    private fun createPendingIntent(
-        action: String,
-        notificationID: Int,
-        label: String,
-        originalNotificationKey: String
-    ): PendingIntent {
-        val intent = Intent(this, NotificationListener::class.java)
-        intent.data = Uri.parse("alarmingnotifications://$action/$notificationID/${originalNotificationKey.hashCode()}") // Uniquify intent.
-        intent.putExtra("action", action)
-        intent.putExtra("notificationID", notificationID)
-        intent.putExtra("label", label)
-        intent.putExtra("originalNotificationKey", originalNotificationKey)
-        return PendingIntent.getService(
-            this,
-            0, // Unused but platform requires >= 0.
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-    }
 
-    @Suppress("DEPRECATION")
-    private fun showNotification(label: String, originalNotificationKey: String) {
-        if (!mp.isPlaying) {
-            mp.prepare()
-            mp.start()
-        }
 
-        val notificationID = Random.nextInt(0, maxRandomNotificationId)
-        originalNotificationKeyToAlarmingID[originalNotificationKey] = notificationID
 
-        val stopIntent =
-            createPendingIntent("stop", notificationID, label, originalNotificationKey)
-        val snooze1mIntent =
-            createPendingIntent("snooze1m", notificationID, label, originalNotificationKey)
-        val snooze5mIntent =
-            createPendingIntent("snooze5m", notificationID, label, originalNotificationKey)
 
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        val publicVersion = Notification.Builder(this, notificationChannelID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText("Unlock to view details")
-            .build()
-        val notificationBuilder =
-            Notification.Builder(this, notificationChannelID)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .setPublicVersion(publicVersion)
-                .setContentTitle(label)
-                .setContentText("")
-                .setCategory(Notification.CATEGORY_CALL)
-                .setFlag(Notification.FLAG_NO_CLEAR, true)
-                .setDeleteIntent(stopIntent)
-                .addAction(
-                    Notification.Action.Builder(
-                        android.R.drawable.stat_notify_call_mute,
-                        "Stop",
-                        stopIntent
-                    )
-                        .setSemanticAction(Notification.Action.SEMANTIC_ACTION_MUTE)
-                        .build()
-                )
-                .addAction(
-                    Notification.Action.Builder(
-                        android.R.drawable.stat_notify_call_mute,
-                        "Snooze 1m",
-                        snooze1mIntent
-                    )
-                        .setSemanticAction(Notification.Action.SEMANTIC_ACTION_MUTE)
-                        .build()
-                )
-                .addAction(
-                    Notification.Action.Builder(
-                        android.R.drawable.stat_notify_call_mute,
-                        "Snooze 5m",
-                        snooze5mIntent
-                    )
-                        .setSemanticAction(Notification.Action.SEMANTIC_ACTION_MUTE)
-                        .build()
-                )
-        notificationManager.notify(notificationID, notificationBuilder.build())
-    }
-
-    private fun bundleToString(bundle: Bundle?): String {
-        if (bundle == null) return "(null bundle)"
-        var str = "Bundle{"
-        @Suppress("DEPRECATION")
-        for (key in bundle.keySet()) str += " $key: ${bundle[key]};"
-        str += "}"
-        return str
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        log("extras: ${bundleToString(intent?.extras)}")
-        val action = intent?.getStringExtra("action") ?: return START_NOT_STICKY
-        val label = intent.getStringExtra("label") ?: return START_NOT_STICKY
-        val originalNotificationKey =
-            intent.getStringExtra("originalNotificationKey") ?: return START_NOT_STICKY
-
-        if (action == "show") {
-            showNotification(label, originalNotificationKey)
-            return START_NOT_STICKY
-        }
-
-        val notificationID = intent.getIntExtra("notificationID", -1)
-        if (notificationID < 0) return START_NOT_STICKY
-
-        when (action) {
-            "stop" -> {
-                dismiss(notificationID, originalNotificationKey)
-            }
-
-            "snooze1m", "snooze5m" -> {
-                snooze(action, label, notificationID, originalNotificationKey)
-            }
-
-            else -> {
-                Log.e("AMI", "Unknown action: $action!")
-            }
-        }
-        return START_NOT_STICKY
-
-    }
-
-    @SuppressLint("ScheduleExactAlarm")
-    private fun setExactAlarm(
-        alarmManager: AlarmManager,
-        aci: AlarmManager.AlarmClockInfo,
-        pendingIntent: PendingIntent
-    ) {
-        alarmManager.setAlarmClock(aci, pendingIntent)
-    }
-
-    private fun snooze(
-        action: String,
-        label: String,
-        notificationID: Int,
-        originalNotificationKey: String
-    ) {
-        log("snooze: $action $label $notificationID")
-        val durStr = action.removePrefix("snooze")
-        if (durStr == action) {
-            Log.wtf("AMI", "Missing prefix 'snooze' in $action")
-        }
-        val minutesStr = durStr.removeSuffix("m")
-        if (minutesStr == durStr) {
-            Log.wtf("AMI", "Missing suffix 'm' in $action")
-        }
-        val minutes = minutesStr.toInt()
-        if (minutes != 5 && minutes != 1) {
-            Log.wtf("AMI", "Unexpected snooze duration of $minutes in $action")
-        }
-
-        dismiss(notificationID, "")
-
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, NotificationListener::class.java)
-        intent.data = Uri.parse("alarmingnotifications://resurrect/$notificationID/${originalNotificationKey.hashCode()}") // Uniquify intent.
-        intent.putExtra("action", "show")
-        intent.putExtra("label", label)
-        intent.putExtra("originalNotificationKey", originalNotificationKey)
-        val pendingIntent = PendingIntent.getService(
-            this,
-            0, // Unused but platform requires >= 0.
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val aci =
-            AlarmManager.AlarmClockInfo(System.currentTimeMillis() + 60 * 1000 * minutes, null)
-        log("snoozed for $minutes minutes")
-        setExactAlarm(alarmManager, aci, pendingIntent)
-    }
-
-    private fun dismiss(notificationID: Int, originalNotificationKey: String) {
-        log("dismiss: notificationID: $notificationID")
-        originalNotificationKeyToAlarmingID.entries.removeIf { it.value == notificationID }
-        if (mp.isPlaying && originalNotificationKeyToAlarmingID.values.none { it >= 0 }) {
-            mp.stop()
-        }
-
-        getSystemService(NotificationManager::class.java).cancel(notificationID)
-        cancelNotification(originalNotificationKey)
-    }
 
 }
