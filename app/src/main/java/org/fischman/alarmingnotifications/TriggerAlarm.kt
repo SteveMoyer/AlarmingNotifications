@@ -44,7 +44,7 @@ class TriggerAlarm : Service() {
         }
 
         val notificationID = Random.nextInt(0, maxRandomNotificationId)
-
+        activeAlarms.add(notificationID)
 
         val stopIntent =
             this.createPendingIntent(
@@ -185,7 +185,7 @@ class TriggerAlarm : Service() {
     public fun dismiss(notificationID: Int) {
         log("dismiss: notificationID: $notificationID")
         activeAlarms.remove(notificationID)
-        if (mp.isPlaying && activeAlarms.none { it >= 0 }) {
+        if (mp.isPlaying && activeAlarms.isEmpty()) {
             mp.stop()
         }
 
@@ -197,8 +197,7 @@ class TriggerAlarm : Service() {
         action: String,
         label: String,
         notificationID: Int,
-
-        ) {
+    ) {
         log("snooze: $action $label $notificationID")
         val durStr = action.removePrefix("snooze")
         if (durStr == action) {
@@ -216,11 +215,12 @@ class TriggerAlarm : Service() {
         dismiss(notificationID)
 
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, NotificationListener::class.java)
+        val intent = Intent(this, TriggerAlarm::class.java)
         intent.data =
-            Uri.parse("alarmingnotifications://resurrect/$notificationID}") // Uniquify intent.
+            Uri.parse("alarmingnotifications://resurrect/$notificationID") // Uniquify intent.
         intent.putExtra("action", "show")
         intent.putExtra("label", label)
+        intent.putExtra("originalNotificationKey", "snoozed_$notificationID")
 
         val pendingIntent = PendingIntent.getService(
             this,
