@@ -158,10 +158,7 @@ internal fun PermissionSetupScreen(
                                     }
                                 }
                                 PermissionStep.ReadCalendar -> {
-                                    if (Build.VERSION.SDK_INT >= 33) {
-                                        permissionLauncher.launch(Manifest.permission.READ_CALENDAR)
-                                    }
-
+                                    permissionLauncher.launch(Manifest.permission.READ_CALENDAR)
                                 }
                                 null -> onComplete()
                             }
@@ -256,15 +253,12 @@ internal fun getPermissionStatuses(context: Context): List<PermissionStatus> {
             alarmManager.canScheduleExactAlarms(),
         )
     }
-    if (Build.VERSION.SDK_INT >= 31) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        statuses += PermissionStatus(
-            PermissionStep.ReadCalendar,
-            "Read Calendar",
-            "Required so the app can read calendar events.",
-            context.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED,
-        )
-    }
+    statuses += PermissionStatus(
+        PermissionStep.ReadCalendar,
+        "Read Calendar",
+        "Required so the app can read calendar events.",
+        context.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED,
+    )
 
     return statuses
 }
