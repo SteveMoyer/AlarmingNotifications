@@ -117,7 +117,7 @@ fun EventItem(event: AlarmingCalendarEvent) {
     )
 }
 
-private fun formatTime(timeMillis: Long): String {
+internal fun formatTime(timeMillis: Long): String {
     val date = Date(timeMillis)
     val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     return format.format(date)

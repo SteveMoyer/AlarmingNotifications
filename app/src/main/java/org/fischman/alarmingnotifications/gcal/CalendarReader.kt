@@ -86,16 +86,16 @@ class AlarmingCalendarReader(private val context: Context) {
                 val startTime = if (startColumn != -1) cursor.getLong(startColumn) else 0L
                 val calendarName = if (calendarColumn != -1) cursor.getString(calendarColumn) ?: "Unknown" else "Unknown"
                 val id = if (idColumn != -1) cursor.getString(idColumn) ?: "Unknown" else "Unknown"
-                val originalId = if (originalIdColumn != -1) cursor.getString(originalIdColumn) ?: "Unknown" else "Unknown"
-                val eventId = if (eventIdColumn != -1) cursor.getString(eventIdColumn) ?: "Unknown" else "Unknown"
-                val syncId = if (syncIdColumn != -1) cursor.getString(syncIdColumn) ?: "Unknown" else "Unknown"
-                val rRule = cursor.getString(rRuleColumn)
-                val rDate = cursor.getString(rDateColumn)
+                val originalId = if (originalIdColumn != -1) cursor.getString(originalIdColumn) ?: "" else ""
+                val eventId = if (eventIdColumn != -1) cursor.getString(eventIdColumn) ?: "" else ""
+                val syncId = if (syncIdColumn != -1) cursor.getString(syncIdColumn) ?: "" else ""
+                val rRule = if (rRuleColumn != -1) cursor.getString(rRuleColumn) else null
+                val rDate = if (rDateColumn != -1) cursor.getString(rDateColumn) else null
                 val isRepeating = !rRule.isNullOrEmpty() ||
                         !rDate.isNullOrEmpty() ||
-                        !originalId.isNullOrEmpty()
+                        originalId.isNotEmpty()
 
-                events.add(AlarmingCalendarEvent(title, startTime, calendarName,id,originalId,eventId,syncId,isRepeating))
+                events.add(AlarmingCalendarEvent(title, startTime, calendarName, id, originalId, eventId, syncId, isRepeating))
             }
         }
 
