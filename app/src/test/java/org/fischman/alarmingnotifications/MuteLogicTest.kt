@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 import java.time.LocalDateTime
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, sdk = [34])
 class MuteLogicTest {
 
     private lateinit var context: Context

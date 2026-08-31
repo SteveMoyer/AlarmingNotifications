@@ -45,7 +45,7 @@ class NotificationListener : NotificationListenerService() {
         mp.isLooping = true
     }
 
-    private fun extractText(sbn: StatusBarNotification): List<CharSequence> {
+    internal fun extractText(sbn: StatusBarNotification): List<CharSequence> {
         val extras = sbn.notification.extras
         return (listOfNotNull(
             extras.getCharSequence(Notification.EXTRA_TITLE),
@@ -58,11 +58,11 @@ class NotificationListener : NotificationListenerService() {
             extras.getParcelableArray(Notification.EXTRA_MESSAGES, Bundle::class.java)
         else
             @Suppress("DEPRECATION") extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-                )?.mapNotNull { (it as? Bundle)?.getCharSequence("text") }.orEmpty()
+        )?.mapNotNull { (it as? Bundle)?.getCharSequence("text") }.orEmpty()
         ).filter { it.any(Char::isLetterOrDigit) }
     }
 
-    private fun isInteresting(sbn: StatusBarNotification): Boolean {
+    internal fun isInteresting(sbn: StatusBarNotification): Boolean {
         val prefs = getSettingsSharedPreferences(this)
 
         // Ignore Keep Reminders, now surfaced as Tasks notifications from Calendar (when Tasks app isn't installed), unless disabled.
