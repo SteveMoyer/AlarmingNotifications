@@ -4,13 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import org.fischman.alarmingnotifications.gcal.ui.theme.AlarmingNotificationsTheme
 import java.text.SimpleDateFormat
@@ -36,10 +39,10 @@ class TodaysEventsActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AlarmingNotificationsTheme {
-                val calendars by produceState<List<AlarmingCalendar>>(initialValue = emptyList()) {
+                val calendars by produceState(initialValue = emptyList()) {
                     value = calendarReader.fetchCalendars()
                 }
-                val events by produceState<List<AlarmingCalendarEvent>>(initialValue = emptyList()) {
+                val events by produceState(initialValue = emptyList()) {
                     value = calendarReader.fetchCalendarEvents()
                 }
 
@@ -51,7 +54,7 @@ class TodaysEventsActivity : ComponentActivity() {
                             modifier = Modifier.padding(16.dp),
                             fontWeight = FontWeight.Bold
                         )
-                        CalendarList(calendars, modifier = Modifier.weight(1f))
+                        CalendarList(calendars)
 
                         HorizontalDivider()
 
@@ -61,7 +64,7 @@ class TodaysEventsActivity : ComponentActivity() {
                             modifier = Modifier.padding(16.dp),
                             fontWeight = FontWeight.Bold
                         )
-                        EventList(events, modifier = Modifier.weight(1f))
+                        EventList(events, modifier = Modifier.fillMaxSize())
                     }
                 }
             }
@@ -69,10 +72,11 @@ class TodaysEventsActivity : ComponentActivity() {
     }
 }
 
+@Preview
 @Composable
-fun CalendarList(calendars: List<AlarmingCalendar>, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier.fillMaxWidth()) {
-        items(calendars) { calendar ->
+fun CalendarList(@PreviewParameter(PreviewCalendarProvider::class) calendars: List<AlarmingCalendar>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        calendars.forEach {  calendar ->
             CalendarItem(calendar)
         }
     }
@@ -93,10 +97,11 @@ fun CalendarItem(calendar: AlarmingCalendar) {
     )
 }
 
+@Preview
 @Composable
-fun EventList(events: List<AlarmingCalendarEvent>, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier.fillMaxWidth()) {
-        items(events) { event ->
+fun EventList(@PreviewParameter(PreviewEventProvider::class) events: List<AlarmingCalendarEvent>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        events.forEach { event ->
             EventItem(event)
         }
     }
@@ -107,7 +112,7 @@ fun EventItem(event: AlarmingCalendarEvent) {
     ListItem(
         headlineContent = { Text(event.title) },
         supportingContent = {
-            Text("${formatTime(event.startTime)} • ${event.calendarName}")
+            Text("${formatTime(event.startTime)} • ${event.calendarName} • ${event.id} • ${event.originalId} • ${event.eventId} • ${event.syncId}")
         }
     )
 }

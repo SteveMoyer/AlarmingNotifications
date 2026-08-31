@@ -1,5 +1,6 @@
 package org.fischman.alarmingnotifications.gcal
 
+import android.content.ContentUris
 import android.content.Context
 import android.provider.CalendarContract
 import kotlinx.coroutines.Dispatchers
@@ -9,7 +10,12 @@ import java.util.Calendar
 public data class AlarmingCalendarEvent(
     val title: String,
     val startTime: Long,
-    val calendarName: String
+    val calendarName: String,
+    val id:String,
+    val originalId:String,
+    val eventId:String,
+    val syncId:String,
+    val isRepeating: Boolean
 )
 
 public data class AlarmingCalendar(
@@ -29,9 +35,16 @@ class AlarmingCalendarReader(private val context: Context) {
         val events = mutableListOf<AlarmingCalendarEvent>()
 
         val projection = arrayOf(
-            CalendarContract.Events.TITLE,
-            CalendarContract.Events.DTSTART,
-            CalendarContract.Events.CALENDAR_DISPLAY_NAME
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.RDATE,
+            CalendarContract.Instances.RRULE,
+
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances._ID,
+            CalendarContract.Instances.ORIGINAL_ID,
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Events._SYNC_ID
         )
 
         val calendar = Calendar.getInstance().apply {
@@ -41,31 +54,48 @@ class AlarmingCalendarReader(private val context: Context) {
             set(Calendar.MILLISECOND, 0)
         }
         val startOfDay = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        calendar.add(Calendar.DAY_OF_YEAR, 2)
         val endOfDay = calendar.timeInMillis
 
         // Querying events that start during the current day
-        val selection = "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} < ?"
-        val selectionArgs = arrayOf(startOfDay.toString(), endOfDay.toString())
-        val sortOrder = "${CalendarContract.Events.DTSTART} ASC"
+        val sortOrder = "${CalendarContract.Instances.BEGIN} ASC"
 
+        var uriBuilder= CalendarContract.Instances.CONTENT_URI.buildUpon()
+        ContentUris.appendId(uriBuilder,startOfDay)
+        ContentUris.appendId(uriBuilder,endOfDay)
         context.contentResolver.query(
-            CalendarContract.Events.CONTENT_URI,
+            uriBuilder.build(),
             projection,
-            selection,
-            selectionArgs,
+            null,
+            null,
             sortOrder
         )?.use { cursor ->
-            val titleColumn = cursor.getColumnIndex(CalendarContract.Events.TITLE)
-            val startColumn = cursor.getColumnIndex(CalendarContract.Events.DTSTART)
-            val calendarColumn = cursor.getColumnIndex(CalendarContract.Events.CALENDAR_DISPLAY_NAME)
+            val titleColumn = cursor.getColumnIndex(CalendarContract.Instances.TITLE)
+            val startColumn = cursor.getColumnIndex(CalendarContract.Instances.BEGIN)
+            val calendarColumn = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
+            val idColumn = cursor.getColumnIndex(CalendarContract.Instances._ID)
+            val originalIdColumn = cursor.getColumnIndex(CalendarContract.Instances.ORIGINAL_ID)
+            val eventIdColumn = cursor.getColumnIndex(CalendarContract.Instances.EVENT_ID)
+            val syncIdColumn = cursor.getColumnIndex(CalendarContract.Events._SYNC_ID)
+            val rDateColumn = cursor.getColumnIndex(CalendarContract.Events.RDATE)
+            val rRuleColumn = cursor.getColumnIndex(CalendarContract.Events.RRULE)
+
 
             while (cursor.moveToNext()) {
                 val title = if (titleColumn != -1) cursor.getString(titleColumn) ?: "Untitled" else "Untitled"
                 val startTime = if (startColumn != -1) cursor.getLong(startColumn) else 0L
                 val calendarName = if (calendarColumn != -1) cursor.getString(calendarColumn) ?: "Unknown" else "Unknown"
+                val id = if (idColumn != -1) cursor.getString(idColumn) ?: "Unknown" else "Unknown"
+                val originalId = if (originalIdColumn != -1) cursor.getString(originalIdColumn) ?: "Unknown" else "Unknown"
+                val eventId = if (eventIdColumn != -1) cursor.getString(eventIdColumn) ?: "Unknown" else "Unknown"
+                val syncId = if (syncIdColumn != -1) cursor.getString(syncIdColumn) ?: "Unknown" else "Unknown"
+                val rRule = cursor.getString(rRuleColumn)
+                val rDate = cursor.getString(rDateColumn)
+                val isRepeating = !rRule.isNullOrEmpty() ||
+                        !rDate.isNullOrEmpty() ||
+                        !originalId.isNullOrEmpty()
 
-                events.add(AlarmingCalendarEvent(title, startTime, calendarName))
+                events.add(AlarmingCalendarEvent(title, startTime, calendarName,id,originalId,eventId,syncId,isRepeating))
             }
         }
 
