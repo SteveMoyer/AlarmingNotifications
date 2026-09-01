@@ -20,7 +20,6 @@ import androidx.core.content.getSystemService
 
 
 class NotificationListener : NotificationListenerService() {
-    private val mp = MediaPlayer()
     private var originalNotificationKeyToAlarmingID: MutableMap<String, Int> = mutableMapOf()
 
     override fun onListenerConnected() {
@@ -30,19 +29,6 @@ class NotificationListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         log("onListenerDisconnected")
         MuteStatusNotification.stopWatching()
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        mp.setDataSource(
-            applicationContext,
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        )
-        mp.setAudioAttributes(AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build())
-        mp.isLooping = true
     }
 
     internal fun extractText(sbn: StatusBarNotification): List<CharSequence> {
@@ -92,7 +78,16 @@ class NotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        originalNotificationKeyToAlarmingID[sbn.key]?.let { getSystemService<TriggerAlarm>()!!.dismiss(it) }
+        val notifId = originalNotificationKeyToAlarmingID.remove(sbn.key) ?: return
+        if (notifId >= 0) {
+            val intent = Intent(this, TriggerAlarm::class.java).apply {
+                putExtra("action", "stop")
+                putExtra("notificationID", notifId)
+                putExtra("originalNotificationKey", sbn.key)
+                putExtra("label", "")
+            }
+            startService(intent)
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -104,36 +99,6 @@ class NotificationListener : NotificationListenerService() {
 
         if (!isInteresting(sbn)) {
             return
-        }
-
-        // Other places that text can be stored in Notifications. Possibly of future interest for apps other than GCal and GMail.
-        if (0 > 1) {
-            val textFields = mutableListOf(
-                Notification.EXTRA_TITLE,
-                Notification.EXTRA_TITLE_BIG,
-                Notification.EXTRA_BIG_TEXT,
-                Notification.EXTRA_INFO_TEXT,
-                Notification.EXTRA_SUB_TEXT,
-                Notification.EXTRA_SUMMARY_TEXT,
-                Notification.EXTRA_TEXT,
-                Notification.EXTRA_TEXT_LINES,
-            )
-            if (Build.VERSION.SDK_INT >= 31) {
-                textFields += "Notification.EXTRA_VERIFICATION_TEXT"
-            }
-            val textContents = "${sbn.notification.tickerText}\n${
-                textFields.joinToString(separator = "\n") { fieldName: String ->
-                    @Suppress("DEPRECATION")
-                    "$fieldName - ${sbn.notification.extras.get(fieldName)?.toString()}"
-                }
-            }"
-            log("All text-related fields from notification: $textContents")
-            log("Full notification: $sbn")
-            log("and extras: ")
-            for (key in sbn.notification.extras.keySet()) {
-                @Suppress("DEPRECATION")
-                log("key:" + key + ", value: " + sbn.notification.extras.get(key)?.toString())
-            }
         }
 
         val notification = sbn.notification
@@ -165,9 +130,13 @@ class NotificationListener : NotificationListenerService() {
             return
         }
 
-        var notificationId = getSystemService<TriggerAlarm>()!!.showNotification(label, sbn.key)
-        this.originalNotificationKeyToAlarmingID[sbn.key] =
-            notificationId
+        originalNotificationKeyToAlarmingID[sbn.key] = 1
+        val intent = Intent(this, TriggerAlarm::class.java).apply {
+            putExtra("action", "show")
+            putExtra("label", label)
+            putExtra("originalNotificationKey", sbn.key)
+        }
+        startService(intent)
     }
 
 
