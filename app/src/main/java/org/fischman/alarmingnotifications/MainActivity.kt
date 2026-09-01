@@ -42,14 +42,13 @@ class MainActivity : ComponentActivity() {
     private var contentAttached: Boolean = false
     private var permissionsInFlight: Boolean = false
     private val connection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            val binder = service as TriggerAlarm.AlarmBinder
+        override fun onServiceConnected(className: ComponentName?, service: IBinder?) {
+            val binder = service as? TriggerAlarm.AlarmBinder ?: return
             triggerAlarm = binder.getService()
-            triggerAlarm!!.showNotification("test","teest")
             isBound = true
         }
 
-        override fun onServiceDisconnected(arg0: ComponentName) {
+        override fun onServiceDisconnected(arg0: ComponentName?) {
             isBound = false
             triggerAlarm = null
         }
@@ -71,11 +70,18 @@ class MainActivity : ComponentActivity() {
 
         if (launchPermissionsActivityIfNeeded()) return
         Intent(this, TriggerAlarm::class.java).also { intent ->
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
-
+            bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
 
         ensureContent()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isBound) {
+            unbindService(connection)
+            isBound = false
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
