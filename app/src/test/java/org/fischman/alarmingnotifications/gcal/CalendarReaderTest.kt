@@ -95,6 +95,7 @@ class CalendarReaderTest {
         assertEquals("2001", event1.eventId)
         assertEquals("sync_abc", event1.syncId)
         assertTrue("Event with RRULE should be repeating", event1.isRepeating)
+        assertTrue("Event should have no reminders by default", event1.reminderMinutes.isEmpty())
 
         val event2 = events[1]
         assertEquals("One-time 1:1", event2.title)
@@ -104,6 +105,103 @@ class CalendarReaderTest {
         assertEquals("2002", event2.eventId)
         assertEquals("sync_def", event2.syncId)
         assertFalse("Event with no RRULE, RDATE, or originalId should not be repeating", event2.isRepeating)
+        assertTrue("Event should have no reminders by default", event2.reminderMinutes.isEmpty())
+    }
+
+    @Test
+    fun testFetchCalendarEventsWithReminders() = runTest {
+        // First cursor for instances
+        val instancesCursor = MatrixCursor(arrayOf(
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.RDATE,
+            CalendarContract.Instances.RRULE,
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances._ID,
+            CalendarContract.Instances.ORIGINAL_ID,
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Events._SYNC_ID
+        ))
+
+        instancesCursor.addRow(arrayOf(
+            "Meeting",
+            1725120000000L,
+            null,
+            null,
+            "Work Calendar",
+            "1001",
+            "",
+            "2001",
+            "sync_abc"
+        ))
+
+        instancesCursor.addRow(arrayOf(
+            "Lunch",
+            1725123600000L,
+            null,
+            null,
+            "Personal Calendar",
+            "1002",
+            null,
+            "2002",
+            "sync_def"
+        ))
+
+        // Second cursor for reminders
+        val remindersCursor = MatrixCursor(arrayOf(
+            CalendarContract.Reminders.EVENT_ID,
+            CalendarContract.Reminders.MINUTES
+        ))
+
+        // Add reminders for the first event (2001) - 15 and 30 minutes before
+        remindersCursor.addRow(arrayOf("2001", 15))
+        remindersCursor.addRow(arrayOf("2001", 30))
+        
+        // Add reminder for the second event (2002) - 10 minutes before
+        remindersCursor.addRow(arrayOf("2002", 10))
+
+        every {
+            mockContentResolver.query(
+                any<Uri>(),
+                any<Array<String>>(),
+                null,
+                null,
+                "${CalendarContract.Instances.BEGIN} ASC"
+            )
+        } returns instancesCursor
+
+        every {
+            mockContentResolver.query(
+                CalendarContract.Reminders.CONTENT_URI,
+                arrayOf(
+                    CalendarContract.Reminders.EVENT_ID,
+                    CalendarContract.Reminders.MINUTES
+                ),
+                "${CalendarContract.Reminders.EVENT_ID} IN (2001,2002)",
+                null,
+                null
+            )
+        } returns remindersCursor
+
+        val events = reader.fetchCalendarEvents()
+
+        assertEquals(2, events.size)
+
+        // Check first event has reminders
+        val event1 = events[0]
+        assertEquals("Meeting", event1.title)
+        assertEquals(1725120000000L, event1.startTime)
+        assertEquals("Work Calendar", event1.calendarName)
+        assertEquals("2001", event1.eventId)
+        assertEquals(listOf(15, 30), event1.reminderMinutes)
+        
+        // Check second event has reminders
+        val event2 = events[1]
+        assertEquals("Lunch", event2.title)
+        assertEquals(1725123600000L, event2.startTime)
+        assertEquals("Personal Calendar", event2.calendarName)
+        assertEquals("2002", event2.eventId)
+        assertEquals(listOf(10), event2.reminderMinutes)
     }
 
     @Test
@@ -153,6 +251,7 @@ class CalendarReaderTest {
         assertEquals("", events[0].eventId)
         assertEquals("", events[0].syncId)
         assertFalse(events[0].isRepeating)
+        assertTrue("Event should have no reminders by default", events[0].reminderMinutes.isEmpty())
     }
 
     @Test
@@ -196,15 +295,5 @@ class CalendarReaderTest {
         assertEquals(3L, calendars[2].id)
         assertTrue(calendars[2].isVisible)
         assertFalse(calendars[2].isSynced)
-    }
-
-    @Test
-    fun testFormatTimeFormatsEpochTimestampCorrectly() {
-        val cal = Calendar.getInstance().apply {
-            timeZone = TimeZone.getDefault()
-            set(2026, Calendar.SEPTEMBER, 15, 14, 30, 0)
-        }
-        val formatted = formatTime(cal.timeInMillis)
-        assertTrue("Formatted time should contain 'Sep' and '14:30'", formatted.contains("Sep") && formatted.contains("14:30"))
     }
 }

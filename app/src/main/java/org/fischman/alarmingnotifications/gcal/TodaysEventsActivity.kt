@@ -112,7 +112,7 @@ fun EventItem(event: AlarmingCalendarEvent) {
     ListItem(
         headlineContent = { Text(event.title) },
         supportingContent = {
-            Text("${formatTime(event.startTime)} • ${event.calendarName} • ${event.id} • ${event.originalId} • ${event.eventId} • ${event.syncId}")
+            Text("${formatTime(event.startTime)} • ${event.calendarName} • ${event.id} • ${event.originalId} • ${event.eventId} • ${event.syncId} • ${event.reminderMinutes} ")
         }
     )
 }

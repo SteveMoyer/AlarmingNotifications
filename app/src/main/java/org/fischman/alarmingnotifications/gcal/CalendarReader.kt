@@ -15,7 +15,8 @@ public data class AlarmingCalendarEvent(
     val originalId:String,
     val eventId:String,
     val syncId:String,
-    val isRepeating: Boolean
+    val isRepeating: Boolean,
+    val reminderMinutes: List<Int> = emptyList()
 )
 
 public data class AlarmingCalendar(
@@ -34,7 +35,7 @@ class AlarmingCalendarReader(private val context: Context) {
     suspend fun fetchCalendarEvents(): List<AlarmingCalendarEvent> = withContext(Dispatchers.IO) {
         val events = mutableListOf<AlarmingCalendarEvent>()
 
-        val projection = arrayOf(
+        val instancesProjection = arrayOf(
             CalendarContract.Instances.TITLE,
             CalendarContract.Instances.BEGIN,
             CalendarContract.Instances.RDATE,
@@ -65,7 +66,7 @@ class AlarmingCalendarReader(private val context: Context) {
         ContentUris.appendId(uriBuilder,endOfDay)
         context.contentResolver.query(
             uriBuilder.build(),
-            projection,
+            instancesProjection,
             null,
             null,
             sortOrder
@@ -81,6 +82,10 @@ class AlarmingCalendarReader(private val context: Context) {
             val rRuleColumn = cursor.getColumnIndex(CalendarContract.Events.RRULE)
 
 
+            // Collect event IDs for later reminder query
+            val eventIds = mutableListOf<String>()
+            val eventMap = mutableMapOf<String, AlarmingCalendarEvent>()
+
             while (cursor.moveToNext()) {
                 val title = if (titleColumn != -1) cursor.getString(titleColumn) ?: "Untitled" else "Untitled"
                 val startTime = if (startColumn != -1) cursor.getLong(startColumn) else 0L
@@ -95,11 +100,54 @@ class AlarmingCalendarReader(private val context: Context) {
                         !rDate.isNullOrEmpty() ||
                         originalId.isNotEmpty()
 
-                events.add(AlarmingCalendarEvent(title, startTime, calendarName, id, originalId, eventId, syncId, isRepeating))
+                eventIds.add(eventId)
+                val event = AlarmingCalendarEvent(title, startTime, calendarName, id, originalId, eventId, syncId, isRepeating)
+                eventMap[eventId] = event
+                events.add(event)
+            }
+            
+            // If we have event IDs, query for reminders
+            if (eventIds.isNotEmpty()) {
+                val remindersProjection = arrayOf(
+                    CalendarContract.Reminders.EVENT_ID,
+                    CalendarContract.Reminders.MINUTES
+                )
+                
+                val selection = "${CalendarContract.Reminders.EVENT_ID} IN ${eventIds.joinToString(",", prefix = "(", postfix = ")")}"
+                
+                context.contentResolver.query(
+                    CalendarContract.Reminders.CONTENT_URI,
+                    remindersProjection,
+                    selection,
+                    null,
+                    null
+                )?.use { reminderCursor ->
+                    val eventIdColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.EVENT_ID)
+                    val minutesColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.MINUTES)
+                    
+                    // Build a map of event ID to reminder minutes
+                    val reminderMap = mutableMapOf<String, MutableList<Int>>()
+                    while (reminderCursor.moveToNext()) {
+                        val eventId = if (eventIdColumn != -1) reminderCursor.getString(eventIdColumn) ?: "" else ""
+                        val minutes = if (minutesColumn != -1) reminderCursor.getInt(minutesColumn) else 0
+                        
+                        reminderMap.getOrPut(eventId) { mutableListOf() }.add(minutes)
+                    }
+                    
+                    // Update events with reminder information
+                    val updatedEvents = mutableListOf<AlarmingCalendarEvent>()
+                    events.forEach { event ->
+                        val reminderMinutes = reminderMap[event.eventId] ?: emptyList()
+                        val updatedEvent = event.copy(reminderMinutes = reminderMinutes)
+                        updatedEvents.add(updatedEvent)
+                    }
+                    events.clear()
+                    events.addAll(updatedEvents)
+                }
             }
         }
 
-        events
+        events.toList()
     }
 
     suspend fun fetchCalendars(): List<AlarmingCalendar> = withContext(Dispatchers.IO) {
