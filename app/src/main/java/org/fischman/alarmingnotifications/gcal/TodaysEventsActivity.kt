@@ -27,8 +27,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,23 @@ class TodaysEventsActivity : ComponentActivity() {
     private val calendarReader by lazy { AlarmingCalendarReader(this) }
     private val dailyConfigReader by lazy { DailyAlarmConfigReader(this) }
 
+    private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
+        private set
+
+    private fun toggleReminderStatus(eventId: String, reminderIndex: Int) {
+        events = events.map { event ->
+            if (event.id != eventId) return@map event
+            val updatedReminders = event.reminders.mapIndexed { index, reminder ->
+                if (index == reminderIndex) {
+                    reminder.copy(status = nextReminderStatus(reminder.status, event.isRepeating))
+                } else {
+                    reminder
+                }
+            }
+            event.copy(reminders = updatedReminders)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -57,8 +77,8 @@ class TodaysEventsActivity : ComponentActivity() {
                 val calendars by produceState(initialValue = emptyList()) {
                     value = calendarReader.fetchCalendars()
                 }
-                val events by produceState(initialValue = emptyList()) {
-                    value = dailyConfigReader.fetchDefaultDailyAlarmConfig()
+                LaunchedEffect(Unit) {
+                    events = dailyConfigReader.fetchDefaultDailyAlarmConfig()
                 }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -79,11 +99,25 @@ class TodaysEventsActivity : ComponentActivity() {
                             modifier = Modifier.padding(16.dp),
                             fontWeight = FontWeight.Bold
                         )
-                        EventList(events, modifier = Modifier.fillMaxSize())
+                        EventList(
+                            events,
+                            onReminderToggled = { eventId, reminderIndex ->
+                                toggleReminderStatus(eventId, reminderIndex)
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+internal fun nextReminderStatus(current: ReminderStatus, isRepeating: Boolean): ReminderStatus {
+    return if (current.shouldCreateAlarm()) {
+        if (isRepeating) ReminderStatus.RECURRING_OFF else ReminderStatus.OFF_THIS_TIME
+    } else {
+        if (isRepeating) ReminderStatus.RECURRING_ON else ReminderStatus.ON_THIS_TIME
     }
 }
 
@@ -114,24 +148,28 @@ fun CalendarItem(calendar: AlarmingCalendar) {
 
 @Preview
 @Composable
-fun EventList(@PreviewParameter(PreviewEventProvider::class) events: List<CalendarAlarmConfig>, modifier: Modifier = Modifier) {
+fun EventList(
+    @PreviewParameter(PreviewEventProvider::class) events: List<CalendarAlarmConfig>,
+    onReminderToggled: (eventId: String, reminderIndex: Int) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         events.forEach { event ->
-            EventItem(event)
+            EventItem(event, onReminderToggled)
         }
     }
 }
 
 @Composable
-fun EventItem(event: CalendarAlarmConfig) {
+fun EventItem(event: CalendarAlarmConfig, onReminderToggled: (eventId: String, reminderIndex: Int) -> Unit) {
 
     ListItem(
         headlineContent = { Text("${formatTime(event.startTime)} - ${event.title}")},
         supportingContent = {
             Row {
             Text("Alarms:  ")
-            event.reminders.forEach{ reminder ->
-                AlarmItem(reminder)
+            event.reminders.forEachIndexed { index, reminder ->
+                AlarmItem(reminder, onToggle = { onReminderToggled(event.id, index) })
             }
         }
         }
@@ -139,10 +177,10 @@ fun EventItem(event: CalendarAlarmConfig) {
 }
 
 @Composable
-fun AlarmItem(reminder: ReminderConfig) {
+fun AlarmItem(reminder: ReminderConfig, onToggle: () -> Unit) {
     val selected =reminder.status.shouldCreateAlarm()
     FilterChip(
-        onClick = {},
+        onClick = onToggle,
         label = {
             Text("${reminder.minutes} mins")
         },
