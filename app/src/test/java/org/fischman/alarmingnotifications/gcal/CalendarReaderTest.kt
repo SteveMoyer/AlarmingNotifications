@@ -18,6 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Calendar
 import java.util.TimeZone
+import kotlin.test.assertContentEquals
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [34])
@@ -73,15 +74,33 @@ class CalendarReaderTest {
             "sync_def"
         ))
 
+        val reminderCursor = MatrixCursor(arrayOf(
+            CalendarContract.Reminders.EVENT_ID,
+            CalendarContract.Reminders.MINUTES,
+        ))
+
+        reminderCursor.addRow(arrayOf(2001L,  1))
+        reminderCursor.addRow(arrayOf(2001L,  10))
         every {
             mockContentResolver.query(
-                any<Uri>(),
+                CalendarContract.Reminders.CONTENT_URI,
+                any<Array<String>>(),
+                any(),
+                null,
+                null
+            )
+        } returns reminderCursor
+        every {
+            mockContentResolver.query(
+                any(),
                 any<Array<String>>(),
                 null,
                 null,
                 "${CalendarContract.Instances.BEGIN} ASC"
             )
-        } returns cursor
+        } answers {
+            cursor
+        }
 
         val events = reader.fetchCalendarEvents()
 
@@ -95,7 +114,7 @@ class CalendarReaderTest {
         assertEquals("2001", event1.eventId)
         assertEquals("sync_abc", event1.syncId)
         assertTrue("Event with RRULE should be repeating", event1.isRepeating)
-        assertTrue("Event should have no reminders by default", event1.reminderMinutes.isEmpty())
+        assertContentEquals( event1.reminderMinutes,listOf(1,10))
 
         val event2 = events[1]
         assertEquals("One-time 1:1", event2.title)
@@ -177,11 +196,13 @@ class CalendarReaderTest {
                     CalendarContract.Reminders.EVENT_ID,
                     CalendarContract.Reminders.MINUTES
                 ),
-                "${CalendarContract.Reminders.EVENT_ID} IN (2001,2002)",
+                any<String>(),
                 null,
                 null
             )
-        } returns remindersCursor
+        } answers {
+            remindersCursor
+        }
 
         val events = reader.fetchCalendarEvents()
 
@@ -239,7 +260,9 @@ class CalendarReaderTest {
                 null,
                 any<String>()
             )
-        } returns cursor
+        } answers {
+            cursor
+        }
 
         val events = reader.fetchCalendarEvents()
         assertEquals(1, events.size)
@@ -277,6 +300,7 @@ class CalendarReaderTest {
                 null
             )
         } returns cursor
+
 
         val calendars = reader.fetchCalendars()
 

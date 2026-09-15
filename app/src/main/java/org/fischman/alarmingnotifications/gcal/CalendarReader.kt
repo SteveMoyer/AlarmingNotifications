@@ -106,45 +106,49 @@ class AlarmingCalendarReader(private val context: Context) {
                 events.add(event)
             }
             
-            // If we have event IDs, query for reminders
-            if (eventIds.isNotEmpty()) {
-                val remindersProjection = arrayOf(
-                    CalendarContract.Reminders.EVENT_ID,
-                    CalendarContract.Reminders.MINUTES
-                )
-                
-                val selection = "${CalendarContract.Reminders.EVENT_ID} IN ${eventIds.joinToString(",", prefix = "(", postfix = ")")}"
-                
-                context.contentResolver.query(
-                    CalendarContract.Reminders.CONTENT_URI,
-                    remindersProjection,
-                    selection,
-                    null,
-                    null
-                )?.use { reminderCursor ->
-                    val eventIdColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.EVENT_ID)
-                    val minutesColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.MINUTES)
+                // If we have event IDs, query for reminders
+                if (eventIds.isNotEmpty()) {
+                    val remindersProjection = arrayOf(
+                        CalendarContract.Reminders.EVENT_ID,
+                        CalendarContract.Reminders.MINUTES
+                    )
                     
-                    // Build a map of event ID to reminder minutes
-                    val reminderMap = mutableMapOf<String, MutableList<Int>>()
-                    while (reminderCursor.moveToNext()) {
-                        val eventId = if (eventIdColumn != -1) reminderCursor.getString(eventIdColumn) ?: "" else ""
-                        val minutes = if (minutesColumn != -1) reminderCursor.getInt(minutesColumn) else 0
+                    // Filter out empty event IDs to avoid empty IN clause
+                    val validEventIds = eventIds.filter { it.isNotBlank() }
+                    if (validEventIds.isNotEmpty()) {
+                        val selection = "${CalendarContract.Reminders.EVENT_ID} IN ${validEventIds.joinToString(",", prefix = "(", postfix = ")")}"
                         
-                        reminderMap.getOrPut(eventId) { mutableListOf() }.add(minutes)
+                        context.contentResolver.query(
+                            CalendarContract.Reminders.CONTENT_URI,
+                            remindersProjection,
+                            selection,
+                            null,
+                            null
+                        )?.use { reminderCursor ->
+                            val eventIdColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.EVENT_ID)
+                            val minutesColumn = reminderCursor.getColumnIndex(CalendarContract.Reminders.MINUTES)
+                            
+                            // Build a map of event ID to reminder minutes
+                            val reminderMap = mutableMapOf<String, MutableList<Int>>()
+                            while (reminderCursor.moveToNext()) {
+                                val eventId = if (eventIdColumn != -1) reminderCursor.getString(eventIdColumn) ?: "" else ""
+                                val minutes = if (minutesColumn != -1) reminderCursor.getInt(minutesColumn) else 0
+                                
+                                reminderMap.getOrPut(eventId) { mutableListOf() }.add(minutes)
+                            }
+                            
+                            // Update events with reminder information
+                            val updatedEvents = mutableListOf<AlarmingCalendarEvent>()
+                            events.forEach { event ->
+                                val reminderMinutes = reminderMap[event.eventId] ?: emptyList()
+                                val updatedEvent = event.copy(reminderMinutes = reminderMinutes)
+                                updatedEvents.add(updatedEvent)
+                            }
+                            events.clear()
+                            events.addAll(updatedEvents)
+                        }
                     }
-                    
-                    // Update events with reminder information
-                    val updatedEvents = mutableListOf<AlarmingCalendarEvent>()
-                    events.forEach { event ->
-                        val reminderMinutes = reminderMap[event.eventId] ?: emptyList()
-                        val updatedEvent = event.copy(reminderMinutes = reminderMinutes)
-                        updatedEvents.add(updatedEvent)
-                    }
-                    events.clear()
-                    events.addAll(updatedEvents)
                 }
-            }
         }
 
         events.toList()

@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,11 +17,20 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+
+import androidx.compose.material.icons.filled.Done
+
+import androidx.compose.material.icons.Icons
+
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -29,10 +39,15 @@ import org.fischman.alarmingnotifications.gcal.ui.theme.AlarmingNotificationsThe
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 class TodaysEventsActivity : ComponentActivity() {
 
     private val calendarReader by lazy { AlarmingCalendarReader(this) }
+    private val dailyConfigReader by lazy { DailyAlarmConfigReader(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,7 +58,7 @@ class TodaysEventsActivity : ComponentActivity() {
                     value = calendarReader.fetchCalendars()
                 }
                 val events by produceState(initialValue = emptyList()) {
-                    value = calendarReader.fetchCalendarEvents()
+                    value = dailyConfigReader.fetchDefaultDailyAlarmConfig()
                 }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -99,7 +114,7 @@ fun CalendarItem(calendar: AlarmingCalendar) {
 
 @Preview
 @Composable
-fun EventList(@PreviewParameter(PreviewEventProvider::class) events: List<AlarmingCalendarEvent>, modifier: Modifier = Modifier) {
+fun EventList(@PreviewParameter(PreviewEventProvider::class) events: List<CalendarAlarmConfig>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         events.forEach { event ->
             EventItem(event)
@@ -108,17 +123,50 @@ fun EventList(@PreviewParameter(PreviewEventProvider::class) events: List<Alarmi
 }
 
 @Composable
-fun EventItem(event: AlarmingCalendarEvent) {
+fun EventItem(event: CalendarAlarmConfig) {
+
     ListItem(
-        headlineContent = { Text(event.title) },
+        headlineContent = { Text("${formatTime(event.startTime)} - ${event.title}")},
         supportingContent = {
-            Text("${formatTime(event.startTime)} • ${event.calendarName} • ${event.id} • ${event.originalId} • ${event.eventId} • ${event.syncId} • ${event.reminderMinutes} ")
+            Row {
+            Text("Alarms:  ")
+            event.reminders.forEach{ reminder ->
+                AlarmItem(reminder)
+            }
+        }
         }
     )
 }
 
+@Composable
+fun AlarmItem(reminder: ReminderConfig) {
+    val selected =reminder.status.shouldCreateAlarm()
+    FilterChip(
+        onClick = {},
+        label = {
+            Text("${reminder.minutes} mins")
+        },
+        selected = selected,
+        leadingIcon = if (selected) {
+            {
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = "Done icon",
+                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                )
+            }
+        } else {
+            null
+        },
+    )
+
+}
+
 internal fun formatTime(timeMillis: Long): String {
-    val date = Date(timeMillis)
-    val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-    return format.format(date)
+     val instant = Instant.ofEpochMilli(timeMillis)
+
+    val localDateTime = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
+    //val format = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    ;
+    return localDateTime.format(DateTimeFormatter.ofPattern("MM/dd h:mm a"))
 }
