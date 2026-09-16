@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -20,9 +23,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 
-import androidx.compose.material.icons.filled.Done
-
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material.icons.filled.Today
 
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
@@ -38,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import org.fischman.alarmingnotifications.gcal.datastore.DataStoreRecurringReminderDefaultsRepository
+import org.fischman.alarmingnotifications.gcal.datastore.recurringReminderDefaultsDataStore
 import org.fischman.alarmingnotifications.gcal.ui.theme.AlarmingNotificationsTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,7 +57,10 @@ import java.time.format.DateTimeFormatter
 class TodaysEventsActivity : ComponentActivity() {
 
     private val calendarReader by lazy { AlarmingCalendarReader(this) }
-    private val dailyConfigReader by lazy { DailyAlarmConfigReader(this) }
+    private val defaultsRepository by lazy {
+        DataStoreRecurringReminderDefaultsRepository(applicationContext.recurringReminderDefaultsDataStore)
+    }
+    private val dailyConfigReader by lazy { DailyAlarmConfigReader(this, defaultsRepository) }
 
     private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
         private set
@@ -60,12 +70,47 @@ class TodaysEventsActivity : ComponentActivity() {
             if (event.id != eventId) return@map event
             val updatedReminders = event.reminders.mapIndexed { index, reminder ->
                 if (index == reminderIndex) {
-                    reminder.copy(status = nextReminderStatus(reminder.status, event.isRepeating))
+                    val newStatus = nextReminderStatus(reminder.status, reminder.defaultStatus, event.isRepeating)
+                    val newDefault = when (newStatus) {
+                        ReminderStatus.RECURRING_ON, ReminderStatus.RECURRING_OFF -> newStatus
+                        else -> reminder.defaultStatus
+                    }
+                    reminder.copy(status = newStatus, defaultStatus = newDefault)
                 } else {
                     reminder
                 }
             }
             event.copy(reminders = updatedReminders)
+        }
+    }
+
+    private fun saveReminderDefaults() {
+        lifecycleScope.launch {
+            events.forEach { event ->
+                if (!event.isRepeating) return@forEach
+                val eventKey = event.originalId.takeIf { it.isNotBlank() } ?: event.eventId
+                event.reminders.forEach { reminder ->
+                    if (reminder.defaultStatus == reminder.originalDefaultStatus) return@forEach
+                    when (reminder.defaultStatus) {
+                        ReminderStatus.RECURRING_ON, ReminderStatus.RECURRING_OFF ->
+                            defaultsRepository.saveReminderDefault(
+                                eventKey,
+                                reminder.minutes,
+                                reminder.defaultStatus
+                            )
+                        ReminderStatus.DEFAULT_OFF ->
+                            defaultsRepository.deleteReminderDefault(eventKey, reminder.minutes)
+                        else -> { /* one-time overrides are not persisted */ }
+                    }
+                }
+            }
+            events = events.map { event ->
+                event.copy(
+                    reminders = event.reminders.map { reminder ->
+                        reminder.copy(originalDefaultStatus = reminder.defaultStatus)
+                    }
+                )
+            }
         }
     }
 
@@ -104,8 +149,14 @@ class TodaysEventsActivity : ComponentActivity() {
                             onReminderToggled = { eventId, reminderIndex ->
                                 toggleReminderStatus(eventId, reminderIndex)
                             },
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.weight(1f)
                         )
+                        Button(
+                            onClick = { saveReminderDefaults() },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp)
+                        ) {
+                            Text("Save")
+                        }
                     }
                 }
             }
@@ -113,11 +164,25 @@ class TodaysEventsActivity : ComponentActivity() {
     }
 }
 
-internal fun nextReminderStatus(current: ReminderStatus, isRepeating: Boolean): ReminderStatus {
-    return if (current.shouldCreateAlarm()) {
-        if (isRepeating) ReminderStatus.RECURRING_OFF else ReminderStatus.OFF_THIS_TIME
-    } else {
-        if (isRepeating) ReminderStatus.RECURRING_ON else ReminderStatus.ON_THIS_TIME
+internal fun nextReminderStatus(current: ReminderStatus, default: ReminderStatus, isRepeating: Boolean): ReminderStatus {
+    if (!isRepeating) {
+        return if (current.shouldCreateAlarm()) ReminderStatus.OFF_THIS_TIME else ReminderStatus.ON_THIS_TIME
+    }
+    return when (default) {
+        ReminderStatus.RECURRING_ON -> when (current) {
+            ReminderStatus.RECURRING_ON -> ReminderStatus.OFF_THIS_TIME
+            ReminderStatus.OFF_THIS_TIME -> ReminderStatus.RECURRING_OFF
+            ReminderStatus.RECURRING_OFF -> ReminderStatus.RECURRING_ON
+            else -> ReminderStatus.RECURRING_ON
+        }
+        ReminderStatus.RECURRING_OFF, ReminderStatus.DEFAULT_OFF -> when (current) {
+            ReminderStatus.RECURRING_OFF -> ReminderStatus.ON_THIS_TIME
+            ReminderStatus.ON_THIS_TIME -> ReminderStatus.RECURRING_ON
+            ReminderStatus.RECURRING_ON -> ReminderStatus.OFF_THIS_TIME
+            ReminderStatus.DEFAULT_OFF -> ReminderStatus.ON_THIS_TIME
+            else -> ReminderStatus.RECURRING_OFF
+        }
+        else -> current
     }
 }
 
@@ -178,24 +243,39 @@ fun EventItem(event: CalendarAlarmConfig, onReminderToggled: (eventId: String, r
 
 @Composable
 fun AlarmItem(reminder: ReminderConfig, onToggle: () -> Unit) {
-    val selected =reminder.status.shouldCreateAlarm()
+    val selected = reminder.status.shouldCreateAlarm()
+    val (icon, contentDescription) = when (reminder.status) {
+        ReminderStatus.RECURRING_ON -> Icons.Filled.Done to "Recurring on"
+        ReminderStatus.ON_THIS_TIME -> Icons.Filled.Today to "On this time only"
+        ReminderStatus.OFF_THIS_TIME -> Icons.Filled.Snooze to "Off this time only"
+        ReminderStatus.RECURRING_OFF, ReminderStatus.DEFAULT_OFF -> Icons.Filled.Block to "Recurring off"
+        ReminderStatus.HIDE -> Icons.Filled.Block to "Hidden"
+    }
+    val colors = when (reminder.status) {
+        ReminderStatus.RECURRING_ON -> FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        ReminderStatus.ON_THIS_TIME -> FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+        else -> FilterChipDefaults.filterChipColors()
+    }
     FilterChip(
         onClick = onToggle,
         label = {
             Text("${reminder.minutes} mins")
         },
         selected = selected,
-        leadingIcon = if (selected) {
-            {
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = "Done icon",
-                    modifier = Modifier.size(FilterChipDefaults.IconSize)
-                )
-            }
-        } else {
-            null
+        leadingIcon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(FilterChipDefaults.IconSize)
+            )
         },
+        colors = colors,
     )
 
 }

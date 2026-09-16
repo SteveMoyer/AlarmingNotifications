@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option java_package = "org.fischman.alarmingnotifications.gcal";
+option java_multiple_files = true;
+
+// Top-level container persisted by DataStore.
+message RecurringEventDefaultsCollection {
+  repeated RecurringEventDefaults events = 1;
+}
+
+// Persisted defaults for one recurring calendar event.
+message RecurringEventDefaults {
+  // originalId if present, otherwise eventId.
+  string event_key = 1;
+  repeated ReminderDefault reminders = 2;
+}
+
+// Persisted default for one reminder of a recurring event.
+message ReminderDefault {
+  int32 minutes = 1;
+  ReminderDefaultStatus default_status = 2;
+}
+
+enum ReminderDefaultStatus {
+  // Proto3 requires a zero value. It is not used as a meaningful saved state.
+  DEFAULT_STATUS_UNSPECIFIED = 0;
+  RECURRING_ON = 1;
+  RECURRING_OFF = 2;
+}

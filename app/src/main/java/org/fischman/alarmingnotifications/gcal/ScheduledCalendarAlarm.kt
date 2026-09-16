@@ -16,7 +16,9 @@ public data class CalendarAlarmConfig(
 
 public data class ReminderConfig (
     val minutes: Int,
-    val status: ReminderStatus
+    val status: ReminderStatus,
+    val defaultStatus: ReminderStatus = status,
+    val originalDefaultStatus: ReminderStatus = status,
 )
 public enum class CalendarAlarmStatus {
     DEFAULT,// Show it

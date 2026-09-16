@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.protobuf")
 }
 tasks.withType<Test> {
     testLogging {
@@ -64,8 +65,28 @@ android {
     }
 }
 
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.29.4"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") {
+                    option("lite")
+                }
+                create("kotlin") {
+                    option("lite")
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
+    implementation("androidx.datastore:datastore:1.1.5")
+    implementation("com.google.protobuf:protobuf-kotlin-lite:4.29.4")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     // The Bill of Materials (BOM) handles versioning for all compose libs
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
@@ -75,6 +96,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.3")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
