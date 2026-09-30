@@ -37,6 +37,7 @@ class CalendarAlarmSchedulerTest {
         startTime: Long,
         reminders: List<ReminderConfig>,
         id: String = "event1",
+        isRepeating: Boolean = false,
     ) = CalendarAlarmConfig(
         title = "Team Sync",
         startTime = startTime,
@@ -45,7 +46,7 @@ class CalendarAlarmSchedulerTest {
         originalId = "",
         eventId = "2001",
         syncId = "sync",
-        isRepeating = false,
+        isRepeating = isRepeating,
         status = CalendarAlarmStatus.DEFAULT,
         reminders = reminders,
     )
@@ -170,6 +171,72 @@ class CalendarAlarmSchedulerTest {
 
         assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
         assertEquals(listOf("future"), repository.alarms.map { it.eventId })
+    }
+
+    @Test
+    fun schedulesCustomReminder() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+
+        scheduler().scheduleAlarms(
+            listOf(
+                event(
+                    startTime,
+                    listOf(
+                        ReminderConfig(minutes = 45, status = ReminderStatus.RECURRING_ON, isCustom = true)
+                    )
+                )
+            )
+        )
+
+        val scheduled = shadowAlarmManager.scheduledAlarms
+        assertEquals(1, scheduled.size)
+        assertEquals(startTime - 45 * 60_000L, scheduled[0].triggerAtTime)
+        assertEquals(
+            listOf(ScheduledAlarm("event1", 45, "Team Sync", startTime - 45 * 60_000L)),
+            repository.alarms
+        )
+    }
+
+    @Test
+    fun skipsCustomReminderWhoseTriggerTimeIsInThePast() = runTest {
+        val startTime = System.currentTimeMillis() + 5 * 60_000
+
+        scheduler().scheduleAlarms(
+            listOf(
+                event(
+                    startTime,
+                    listOf(
+                        ReminderConfig(minutes = 10, status = ReminderStatus.RECURRING_ON, isCustom = true)
+                    )
+                )
+            )
+        )
+
+        assertTrue(shadowAlarmManager.scheduledAlarms.isEmpty())
+        assertTrue(repository.alarms.isEmpty())
+    }
+
+    @Test
+    fun schedulesCustomReminderOnRepeatingEvent() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+
+        scheduler().scheduleAlarms(
+            listOf(
+                event(
+                    startTime,
+                    listOf(
+                        ReminderConfig(minutes = 45, status = ReminderStatus.RECURRING_ON, isCustom = true)
+                    ),
+                    isRepeating = true,
+                )
+            )
+        )
+
+        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(
+            listOf(ScheduledAlarm("event1", 45, "Team Sync", startTime - 45 * 60_000L)),
+            repository.alarms
+        )
     }
 }
 
