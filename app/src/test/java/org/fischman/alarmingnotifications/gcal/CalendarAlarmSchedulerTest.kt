@@ -3,6 +3,7 @@ package org.fischman.alarmingnotifications.gcal
 import android.app.AlarmManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -19,13 +20,18 @@ class CalendarAlarmSchedulerTest {
 
     private lateinit var context: Context
     private lateinit var shadowAlarmManager: ShadowAlarmManager
+    private lateinit var repository: FakeScheduledAlarmRepository
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         shadowAlarmManager = shadowOf(alarmManager)
+        repository = FakeScheduledAlarmRepository()
     }
+
+    private fun scheduler(now: Long = System.currentTimeMillis()) =
+        CalendarAlarmScheduler(context, repository) { now }
 
     private fun event(
         startTime: Long,
@@ -45,11 +51,10 @@ class CalendarAlarmSchedulerTest {
     )
 
     @Test
-    fun schedulesOnReminderAtStartTimeMinusMinutes() {
+    fun schedulesOnReminderAtStartTimeMinusMinutes() = runTest {
         val startTime = System.currentTimeMillis() + 3_600_000
-        val scheduler = CalendarAlarmScheduler(context)
 
-        scheduler.scheduleAlarms(
+        scheduler().scheduleAlarms(
             listOf(event(startTime, listOf(ReminderConfig(minutes = 10, status = ReminderStatus.ON_THIS_TIME))))
         )
 
@@ -59,11 +64,10 @@ class CalendarAlarmSchedulerTest {
     }
 
     @Test
-    fun skipsRemindersThatAreNotOn() {
+    fun skipsRemindersThatAreNotOn() = runTest {
         val startTime = System.currentTimeMillis() + 3_600_000
-        val scheduler = CalendarAlarmScheduler(context)
 
-        scheduler.scheduleAlarms(
+        scheduler().scheduleAlarms(
             listOf(
                 event(
                     startTime,
@@ -76,14 +80,14 @@ class CalendarAlarmSchedulerTest {
         )
 
         assertTrue(shadowAlarmManager.scheduledAlarms.isEmpty())
+        assertTrue(repository.alarms.isEmpty())
     }
 
     @Test
-    fun skipsRemindersWhoseTriggerTimeIsInThePast() {
+    fun skipsRemindersWhoseTriggerTimeIsInThePast() = runTest {
         val startTime = System.currentTimeMillis() + 5 * 60_000
-        val scheduler = CalendarAlarmScheduler(context)
 
-        scheduler.scheduleAlarms(
+        scheduler().scheduleAlarms(
             listOf(
                 event(
                     startTime,
@@ -101,11 +105,10 @@ class CalendarAlarmSchedulerTest {
     }
 
     @Test
-    fun schedulesEachOnReminderIndependently() {
+    fun schedulesEachOnReminderIndependently() = runTest {
         val startTime = System.currentTimeMillis() + 3_600_000
-        val scheduler = CalendarAlarmScheduler(context)
 
-        scheduler.scheduleAlarms(
+        scheduler().scheduleAlarms(
             listOf(
                 event(
                     startTime,
@@ -124,5 +127,58 @@ class CalendarAlarmSchedulerTest {
         )
 
         assertEquals(3, shadowAlarmManager.scheduledAlarms.size)
+    }
+
+    @Test
+    fun persistsScheduledAlarms() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+
+        scheduler().scheduleAlarms(
+            listOf(event(startTime, listOf(ReminderConfig(minutes = 10, status = ReminderStatus.ON_THIS_TIME))))
+        )
+
+        assertEquals(
+            listOf(ScheduledAlarm("event1", 10, "Team Sync", startTime - 10 * 60_000L)),
+            repository.alarms
+        )
+    }
+
+    @Test
+    fun reschedulePersistedRegistersFutureAlarms() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+        repository.alarms = listOf(
+            ScheduledAlarm("event1", 10, "Team Sync", startTime - 10 * 60_000L)
+        )
+
+        scheduler().reschedulePersisted()
+
+        val scheduled = shadowAlarmManager.scheduledAlarms
+        assertEquals(1, scheduled.size)
+        assertEquals(startTime - 10 * 60_000L, scheduled[0].triggerAtTime)
+        assertEquals(1, repository.alarms.size)
+    }
+
+    @Test
+    fun reschedulePersistedPrunesPastAlarms() = runTest {
+        val now = System.currentTimeMillis()
+        repository.alarms = listOf(
+            ScheduledAlarm("past", 10, "Old", now - 60_000L),
+            ScheduledAlarm("future", 10, "Soon", now + 3_600_000L),
+        )
+
+        scheduler(now).reschedulePersisted()
+
+        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+        assertEquals(listOf("future"), repository.alarms.map { it.eventId })
+    }
+}
+
+private class FakeScheduledAlarmRepository : ScheduledAlarmRepository {
+    var alarms: List<ScheduledAlarm> = emptyList()
+
+    override suspend fun getAll(): List<ScheduledAlarm> = alarms
+
+    override suspend fun replaceAll(alarms: List<ScheduledAlarm>) {
+        this.alarms = alarms
     }
 }

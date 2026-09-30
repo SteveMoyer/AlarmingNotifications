@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option java_package = "org.fischman.alarmingnotifications.gcal";
+option java_multiple_files = true;
+
+// Top-level container persisted by DataStore.
+message ScheduledAlarmCollection {
+  repeated ScheduledAlarmEntry alarms = 1;
+}
+
+// One exact alarm scheduled for a calendar reminder.
+message ScheduledAlarmEntry {
+  // Calendar event id, used to build a unique PendingIntent.
+  string event_id = 1;
+  // Reminder offset in minutes before the event start.
+  int32 minutes = 2;
+  // Event title, passed as the notification label.
+  string label = 3;
+  // Absolute trigger time in epoch milliseconds.
+  int64 trigger_at = 4;
+}

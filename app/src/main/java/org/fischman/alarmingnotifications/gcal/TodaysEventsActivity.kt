@@ -44,7 +44,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import org.fischman.alarmingnotifications.gcal.datastore.DataStoreRecurringReminderDefaultsRepository
+import org.fischman.alarmingnotifications.gcal.datastore.DataStoreScheduledAlarmRepository
 import org.fischman.alarmingnotifications.gcal.datastore.recurringReminderDefaultsDataStore
+import org.fischman.alarmingnotifications.gcal.datastore.scheduledAlarmsDataStore
 import org.fischman.alarmingnotifications.gcal.ui.theme.AlarmingNotificationsTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -61,7 +63,10 @@ class TodaysEventsActivity : ComponentActivity() {
         DataStoreRecurringReminderDefaultsRepository(applicationContext.recurringReminderDefaultsDataStore)
     }
     private val dailyConfigReader by lazy { DailyAlarmConfigReader(this, defaultsRepository) }
-    private val alarmScheduler by lazy { CalendarAlarmScheduler(this) }
+    private val scheduledAlarmRepository by lazy {
+        DataStoreScheduledAlarmRepository(applicationContext.scheduledAlarmsDataStore)
+    }
+    private val alarmScheduler by lazy { CalendarAlarmScheduler(this, scheduledAlarmRepository) }
 
     private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
         private set
@@ -117,7 +122,9 @@ class TodaysEventsActivity : ComponentActivity() {
 
     private fun createAlarmsAndSave() {
         saveReminderDefaults()
-        alarmScheduler.scheduleAlarms(events)
+        lifecycleScope.launch {
+            alarmScheduler.scheduleAlarms(events)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
