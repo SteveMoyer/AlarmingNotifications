@@ -61,6 +61,7 @@ class TodaysEventsActivity : ComponentActivity() {
         DataStoreRecurringReminderDefaultsRepository(applicationContext.recurringReminderDefaultsDataStore)
     }
     private val dailyConfigReader by lazy { DailyAlarmConfigReader(this, defaultsRepository) }
+    private val alarmScheduler by lazy { CalendarAlarmScheduler(this) }
 
     private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
         private set
@@ -114,6 +115,11 @@ class TodaysEventsActivity : ComponentActivity() {
         }
     }
 
+    private fun createAlarmsAndSave() {
+        saveReminderDefaults()
+        alarmScheduler.scheduleAlarms(events)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -156,6 +162,12 @@ class TodaysEventsActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth().padding(16.dp)
                         ) {
                             Text("Save")
+                        }
+                        Button(
+                            onClick = { createAlarmsAndSave() },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        ) {
+                            Text("Create Alarms and Save")
                         }
                     }
                 }
