@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Today
@@ -38,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
@@ -73,17 +78,12 @@ class TodaysEventsActivity : ComponentActivity() {
     private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
         private set
 
-    private fun toggleReminderStatus(eventId: String, reminderIndex: Int) {
+    private fun setReminderStatus(eventId: String, reminderIndex: Int, status: ReminderStatus) {
         events = events.map { event ->
             if (event.id != eventId) return@map event
             val updatedReminders = event.reminders.mapIndexed { index, reminder ->
                 if (index == reminderIndex) {
-                    val newStatus = nextReminderStatus(reminder.status, reminder.defaultStatus, event.isRepeating)
-                    val newDefault = when (newStatus) {
-                        ReminderStatus.RECURRING_ON, ReminderStatus.RECURRING_OFF -> newStatus
-                        else -> reminder.defaultStatus
-                    }
-                    reminder.copy(status = newStatus, defaultStatus = newDefault)
+                    applyReminderSelection(reminder, status)
                 } else {
                     reminder
                 }
@@ -167,8 +167,8 @@ class TodaysEventsActivity : ComponentActivity() {
                         EventList(
                             events,
                             scheduledKeys = scheduledKeys,
-                            onReminderToggled = { eventId, reminderIndex ->
-                                toggleReminderStatus(eventId, reminderIndex)
+                            onReminderStatusSelected = { eventId, reminderIndex, status ->
+                                setReminderStatus(eventId, reminderIndex, status)
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -192,27 +192,36 @@ class TodaysEventsActivity : ComponentActivity() {
     }
 }
 
-internal fun nextReminderStatus(current: ReminderStatus, default: ReminderStatus, isRepeating: Boolean): ReminderStatus {
-    if (!isRepeating) {
-        return if (current.shouldCreateAlarm()) ReminderStatus.OFF_THIS_TIME else ReminderStatus.ON_THIS_TIME
+internal fun selectableStatuses(isRepeating: Boolean): List<ReminderStatus> =
+    if (isRepeating) {
+        listOf(
+            ReminderStatus.RECURRING_ON,
+            ReminderStatus.RECURRING_OFF,
+            ReminderStatus.ON_THIS_TIME,
+            ReminderStatus.OFF_THIS_TIME,
+        )
+    } else {
+        listOf(
+            ReminderStatus.ON_THIS_TIME,
+            ReminderStatus.OFF_THIS_TIME,
+        )
     }
-    return when (default) {
-        ReminderStatus.RECURRING_ON -> when (current) {
-            ReminderStatus.RECURRING_ON -> ReminderStatus.OFF_THIS_TIME
-            ReminderStatus.OFF_THIS_TIME -> ReminderStatus.RECURRING_OFF
-            ReminderStatus.RECURRING_OFF -> ReminderStatus.RECURRING_ON
-            else -> ReminderStatus.RECURRING_ON
-        }
-        ReminderStatus.RECURRING_OFF, ReminderStatus.DEFAULT_OFF -> when (current) {
-            ReminderStatus.RECURRING_OFF -> ReminderStatus.ON_THIS_TIME
-            ReminderStatus.ON_THIS_TIME -> ReminderStatus.RECURRING_ON
-            ReminderStatus.RECURRING_ON -> ReminderStatus.OFF_THIS_TIME
-            ReminderStatus.DEFAULT_OFF -> ReminderStatus.ON_THIS_TIME
-            else -> ReminderStatus.RECURRING_OFF
-        }
-        else -> current
-    }
+
+internal fun reminderStatusLabel(status: ReminderStatus): String = when (status) {
+    ReminderStatus.RECURRING_ON -> "On every time"
+    ReminderStatus.RECURRING_OFF -> "Off every time"
+    ReminderStatus.ON_THIS_TIME -> "On this time only"
+    ReminderStatus.OFF_THIS_TIME -> "Off this time only"
+    ReminderStatus.DEFAULT_OFF -> "Use calendar default"
+    ReminderStatus.HIDE -> "Hidden"
 }
+
+internal fun applyReminderSelection(reminder: ReminderConfig, selection: ReminderStatus): ReminderConfig =
+    when (selection) {
+        ReminderStatus.RECURRING_ON, ReminderStatus.RECURRING_OFF ->
+            reminder.copy(status = selection, defaultStatus = selection)
+        else -> reminder.copy(status = selection)
+    }
 
 @Preview
 @Composable
@@ -244,12 +253,12 @@ fun CalendarItem(calendar: AlarmingCalendar) {
 fun EventList(
     @PreviewParameter(PreviewEventProvider::class) events: List<CalendarAlarmConfig>,
     scheduledKeys: Set<Pair<String, Int>> = emptySet(),
-    onReminderToggled: (eventId: String, reminderIndex: Int) -> Unit = { _, _ -> },
+    onReminderStatusSelected: (eventId: String, reminderIndex: Int, status: ReminderStatus) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         events.forEach { event ->
-            EventItem(event, scheduledKeys, onReminderToggled)
+            EventItem(event, scheduledKeys, onReminderStatusSelected)
         }
     }
 }
@@ -258,7 +267,7 @@ fun EventList(
 fun EventItem(
     event: CalendarAlarmConfig,
     scheduledKeys: Set<Pair<String, Int>> = emptySet(),
-    onReminderToggled: (eventId: String, reminderIndex: Int) -> Unit,
+    onReminderStatusSelected: (eventId: String, reminderIndex: Int, status: ReminderStatus) -> Unit,
 ) {
 
     ListItem(
@@ -269,8 +278,9 @@ fun EventItem(
             event.reminders.forEachIndexed { index, reminder ->
                 AlarmItem(
                     reminder,
+                    isRepeating = event.isRepeating,
                     isScheduled = (event.id to reminder.minutes) in scheduledKeys,
-                    onToggle = { onReminderToggled(event.id, index) }
+                    onStatusSelected = { status -> onReminderStatusSelected(event.id, index, status) }
                 )
             }
         }
@@ -279,7 +289,12 @@ fun EventItem(
 }
 
 @Composable
-fun AlarmItem(reminder: ReminderConfig, isScheduled: Boolean = false, onToggle: () -> Unit) {
+fun AlarmItem(
+    reminder: ReminderConfig,
+    isRepeating: Boolean,
+    isScheduled: Boolean = false,
+    onStatusSelected: (ReminderStatus) -> Unit,
+) {
     val selected = reminder.status.shouldCreateAlarm()
     val (icon, contentDescription) = when (reminder.status) {
         ReminderStatus.RECURRING_ON -> Icons.Filled.Done to "Recurring on"
@@ -299,32 +314,58 @@ fun AlarmItem(reminder: ReminderConfig, isScheduled: Boolean = false, onToggle: 
         )
         else -> FilterChipDefaults.filterChipColors()
     }
-    FilterChip(
-        onClick = onToggle,
-        label = {
-            Text("${reminder.minutes} mins")
-        },
-        selected = selected,
-        leadingIcon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(FilterChipDefaults.IconSize)
-            )
-        },
-        trailingIcon = if (isScheduled) {
-            {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            onClick = { expanded = true },
+            label = {
+                Text("${reminder.minutes} mins")
+            },
+            selected = selected,
+            leadingIcon = {
                 Icon(
-                    imageVector = Icons.Filled.Alarm,
-                    contentDescription = "Alarm set",
+                    imageVector = icon,
+                    contentDescription = contentDescription,
                     modifier = Modifier.size(FilterChipDefaults.IconSize)
                 )
+            },
+            trailingIcon = if (isScheduled) {
+                {
+                    Icon(
+                        imageVector = Icons.Filled.Alarm,
+                        contentDescription = "Alarm set",
+                        modifier = Modifier.size(FilterChipDefaults.IconSize)
+                    )
+                }
+            } else {
+                null
+            },
+            colors = colors,
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            selectableStatuses(isRepeating).forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(reminderStatusLabel(option)) },
+                    leadingIcon = {
+                        if (option == reminder.status) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize)
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onStatusSelected(option)
+                    }
+                )
             }
-        } else {
-            null
-        },
-        colors = colors,
-    )
+        }
+    }
 
 }
 
