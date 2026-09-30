@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -84,9 +85,19 @@ class TodaysEventsActivity : ComponentActivity() {
         DataStoreScheduledAlarmRepository(applicationContext.scheduledAlarmsDataStore)
     }
     private val alarmScheduler by lazy { CalendarAlarmScheduler(this, scheduledAlarmRepository) }
+    private val calendarFilterRepository by lazy { SharedPreferencesCalendarFilterRepository(this) }
 
     private var events by mutableStateOf(emptyList<CalendarAlarmConfig>())
         private set
+
+    private var excludedCalendarIds by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    private fun setCalendarSelected(calendarId: Long, selected: Boolean) {
+        excludedCalendarIds =
+            if (selected) excludedCalendarIds - calendarId else excludedCalendarIds + calendarId
+        calendarFilterRepository.setExcludedCalendarIds(excludedCalendarIds)
+    }
 
     private fun setReminderStatus(eventId: String, reminderIndex: Int, status: ReminderStatus) {
         events = events.map { event ->
@@ -176,13 +187,15 @@ class TodaysEventsActivity : ComponentActivity() {
 
     private fun createAlarmsAndSave() {
         saveReminderDefaults()
+        val eventsToSchedule = filterEventsByExcludedCalendars(events, excludedCalendarIds)
         lifecycleScope.launch {
-            alarmScheduler.scheduleAlarms(events)
+            alarmScheduler.scheduleAlarms(eventsToSchedule)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        excludedCalendarIds = calendarFilterRepository.getExcludedCalendarIds()
         enableEdgeToEdge()
         setContent {
             AlarmingNotificationsTheme {
@@ -197,6 +210,7 @@ class TodaysEventsActivity : ComponentActivity() {
                 }
                 val scheduledKeys = scheduledReminderKeys(scheduledAlarms)
                 val sortedAlarms = alarmsByTriggerTime(scheduledAlarms)
+                val filteredEvents = filterEventsByExcludedCalendars(events, excludedCalendarIds)
                 var calendarsExpanded by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -206,7 +220,13 @@ class TodaysEventsActivity : ComponentActivity() {
                             expanded = calendarsExpanded,
                             onToggle = { calendarsExpanded = !calendarsExpanded },
                         ) {
-                            CalendarList(calendars)
+                            CalendarList(
+                                calendars = calendars,
+                                excludedCalendarIds = excludedCalendarIds,
+                                onCalendarToggled = { calendarId, selected ->
+                                    setCalendarSelected(calendarId, selected)
+                                },
+                            )
                         }
 
                         HorizontalDivider()
@@ -220,7 +240,7 @@ class TodaysEventsActivity : ComponentActivity() {
                             fontWeight = FontWeight.Bold
                         )
                         EventList(
-                            events,
+                            filteredEvents,
                             scheduledKeys = scheduledKeys,
                             onReminderStatusSelected = { eventId, reminderIndex, status ->
                                 setReminderStatus(eventId, reminderIndex, status)
@@ -324,16 +344,26 @@ fun CollapsibleSection(
 
 @Preview
 @Composable
-fun CalendarList(@PreviewParameter(PreviewCalendarProvider::class) calendars: List<AlarmingCalendar>, modifier: Modifier = Modifier) {
+fun CalendarList(
+    @PreviewParameter(PreviewCalendarProvider::class) calendars: List<AlarmingCalendar>,
+    excludedCalendarIds: Set<Long> = emptySet(),
+    onCalendarToggled: (calendarId: Long, selected: Boolean) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.fillMaxWidth()) {
-        calendars.forEach {  calendar ->
-            CalendarItem(calendar)
+        calendars.forEach { calendar ->
+            val selected = calendar.id !in excludedCalendarIds
+            CalendarItem(
+                calendar = calendar,
+                selected = selected,
+                onToggle = { onCalendarToggled(calendar.id, !selected) },
+            )
         }
     }
 }
 
 @Composable
-fun CalendarItem(calendar: AlarmingCalendar) {
+fun CalendarItem(calendar: AlarmingCalendar, selected: Boolean, onToggle: () -> Unit) {
     ListItem(
         headlineContent = { Text(calendar.displayName) },
         supportingContent = {
@@ -343,7 +373,11 @@ fun CalendarItem(calendar: AlarmingCalendar) {
                 if (!calendar.isSynced) append(" • Not Synced")
             }
             Text(status)
-        }
+        },
+        leadingContent = {
+            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+        },
+        modifier = Modifier.clickable { onToggle() },
     )
 }
 

@@ -5,6 +5,7 @@ public data class CalendarAlarmConfig(
     val title: String,
     val startTime: Long,
     val calendarName: String,
+    val calendarId: Long,
     val id:String,
     val originalId:String,
     val eventId:String,

@@ -67,17 +67,18 @@ class DailyAlarmConfigReaderTest {
         startTime: Long,
         rrule: String?,
         calendarName: String,
+        calendarId: Long = 1L,
         id: String,
         originalId: String?,
         eventId: String,
         syncId: String,
-    ) = arrayOf(title, startTime, null, rrule, calendarName, id, originalId, eventId, syncId)
+    ) = arrayOf(title, startTime, null, rrule, calendarName, calendarId, id, originalId, eventId, syncId)
 
     @Test
     fun customReminderIsMergedForRepeatingEvent() = runTest {
         stubCalendar(
             events = listOf(
-                instanceRow("Weekly Sync", 1_700_000_000_000L, "FREQ=WEEKLY", "Work", "1001", "", "2001", "sync")
+                instanceRow("Weekly Sync", 1_700_000_000_000L, "FREQ=WEEKLY", "Work", 1L, "1001", "", "2001", "sync")
             ),
             reminders = listOf(arrayOf("2001", 10)),
         )
@@ -88,6 +89,7 @@ class DailyAlarmConfigReaderTest {
         val events = reader.fetchDefaultDailyAlarmConfig()
 
         assertEquals(1, events.size)
+        assertEquals(1L, events[0].calendarId)
         val reminders = events[0].reminders
         assertEquals(listOf(10, 45), reminders.map { it.minutes })
         assertFalse(reminders[0].isCustom)
@@ -100,7 +102,7 @@ class DailyAlarmConfigReaderTest {
     fun customReminderIsOnThisTimeForNonRepeatingEvent() = runTest {
         stubCalendar(
             events = listOf(
-                instanceRow("One-time", 1_700_000_000_000L, null, "Work", "1001", null, "2001", "sync")
+                instanceRow("One-time", 1_700_000_000_000L, null, "Work", 1L, "1001", null, "2001", "sync")
             ),
             reminders = emptyList(),
         )
@@ -119,7 +121,7 @@ class DailyAlarmConfigReaderTest {
     fun calendarReminderUsesSavedDefault() = runTest {
         stubCalendar(
             events = listOf(
-                instanceRow("Weekly Sync", 1_700_000_000_000L, "FREQ=WEEKLY", "Work", "1001", "", "2001", "sync")
+                instanceRow("Weekly Sync", 1_700_000_000_000L, "FREQ=WEEKLY", "Work", 1L, "1001", "", "2001", "sync")
             ),
             reminders = listOf(arrayOf("2001", 10)),
         )
@@ -149,6 +151,7 @@ class DailyAlarmConfigReaderTest {
             CalendarContract.Instances.RDATE,
             CalendarContract.Instances.RRULE,
             CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances.CALENDAR_ID,
             CalendarContract.Instances._ID,
             CalendarContract.Instances.ORIGINAL_ID,
             CalendarContract.Instances.EVENT_ID,

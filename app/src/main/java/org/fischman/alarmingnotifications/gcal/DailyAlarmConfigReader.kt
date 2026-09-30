@@ -32,6 +32,7 @@ class DailyAlarmConfigReader(
         title = this.title,
         startTime = this.startTime,
         calendarName = this.calendarName,
+        calendarId = this.calendarId,
 
         id = this.id,
         originalId = this.originalId,

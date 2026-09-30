@@ -42,6 +42,7 @@ class CalendarAlarmSchedulerTest {
         title = "Team Sync",
         startTime = startTime,
         calendarName = "Work",
+        calendarId = 1L,
         id = id,
         originalId = "",
         eventId = "2001",

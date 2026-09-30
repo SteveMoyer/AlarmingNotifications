@@ -25,6 +25,7 @@ const val muteCountKey = "muteCount"
 const val ignoreKeepKey = "ignoreKeep"
 const val ignoreSuffixKey = "ignoreSuffix"
 const val alarmPackagesKey = "alarmPackages"
+const val excludedCalendarIdsKey = "excludedCalendarIds"
 
 val defaultAlarmPackages = setOf("com.google.android.calendar")
 private const val settingsPreferencesName = "settings_preferences"

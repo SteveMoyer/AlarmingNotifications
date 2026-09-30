@@ -11,6 +11,7 @@ public data class AlarmingCalendarEvent(
     val title: String,
     val startTime: Long,
     val calendarName: String,
+    val calendarId: Long,
     val id:String,
     val originalId:String,
     val eventId:String,
@@ -42,6 +43,7 @@ class AlarmingCalendarReader(private val context: Context) {
             CalendarContract.Instances.RRULE,
 
             CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances.CALENDAR_ID,
             CalendarContract.Instances._ID,
             CalendarContract.Instances.ORIGINAL_ID,
             CalendarContract.Instances.EVENT_ID,
@@ -74,6 +76,7 @@ class AlarmingCalendarReader(private val context: Context) {
             val titleColumn = cursor.getColumnIndex(CalendarContract.Instances.TITLE)
             val startColumn = cursor.getColumnIndex(CalendarContract.Instances.BEGIN)
             val calendarColumn = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
+            val calendarIdColumn = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_ID)
             val idColumn = cursor.getColumnIndex(CalendarContract.Instances._ID)
             val originalIdColumn = cursor.getColumnIndex(CalendarContract.Instances.ORIGINAL_ID)
             val eventIdColumn = cursor.getColumnIndex(CalendarContract.Instances.EVENT_ID)
@@ -90,6 +93,7 @@ class AlarmingCalendarReader(private val context: Context) {
                 val title = if (titleColumn != -1) cursor.getString(titleColumn) ?: "Untitled" else "Untitled"
                 val startTime = if (startColumn != -1) cursor.getLong(startColumn) else 0L
                 val calendarName = if (calendarColumn != -1) cursor.getString(calendarColumn) ?: "Unknown" else "Unknown"
+                val calendarId = if (calendarIdColumn != -1) cursor.getLong(calendarIdColumn) else 0L
                 val id = if (idColumn != -1) cursor.getString(idColumn) ?: "Unknown" else "Unknown"
                 val originalId = if (originalIdColumn != -1) cursor.getString(originalIdColumn) ?: "" else ""
                 val eventId = if (eventIdColumn != -1) cursor.getString(eventIdColumn) ?: "" else ""
@@ -101,7 +105,7 @@ class AlarmingCalendarReader(private val context: Context) {
                         originalId.isNotEmpty()
 
                 eventIds.add(eventId)
-                val event = AlarmingCalendarEvent(title, startTime, calendarName, id, originalId, eventId, syncId, isRepeating)
+                val event = AlarmingCalendarEvent(title, startTime, calendarName, calendarId, id, originalId, eventId, syncId, isRepeating)
                 eventMap[eventId] = event
                 events.add(event)
             }
