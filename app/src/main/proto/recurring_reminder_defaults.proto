@@ -13,12 +13,17 @@ message RecurringEventDefaults {
   // originalId if present, otherwise eventId.
   string event_key = 1;
   repeated ReminderDefault reminders = 2;
+  // Epoch millis of the event start for a non-repeating event. Zero for repeating
+  // events. Used to prune all of a single event's reminders once its date is past.
+  int64 single_event_date = 3;
 }
 
-// Persisted default for one reminder of a recurring event.
+// Persisted default for one reminder of a recurring event, or a reminder the user
+// added in the app (is_custom = true).
 message ReminderDefault {
   int32 minutes = 1;
   ReminderDefaultStatus default_status = 2;
+  bool is_custom = 3;
 }
 
 enum ReminderDefaultStatus {

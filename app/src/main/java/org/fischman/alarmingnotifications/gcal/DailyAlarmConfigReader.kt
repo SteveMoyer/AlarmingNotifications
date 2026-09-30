@@ -1,55 +1,90 @@
-
 package org.fischman.alarmingnotifications.gcal
 
-import android.content.ContentUris
 import android.content.Context
-import android.provider.CalendarContract
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.util.Calendar
+import java.time.Instant
+import java.time.ZoneId
 
 class DailyAlarmConfigReader(
     private val context: Context,
     private val defaultsRepository: RecurringReminderDefaultsRepository,
 ) {
     private val calendarReader by lazy { AlarmingCalendarReader(this.context) }
+
     /**
      * Fetches calendar events from the device content provider off the main thread.
      * Requires android.permission.READ_CALENDAR.
      */
     suspend fun fetchDefaultDailyAlarmConfig(): List<CalendarAlarmConfig> {
+        defaultsRepository.pruneExpiredCustomReminders(startOfTodayMillis(System.currentTimeMillis()))
         val events = calendarReader.fetchCalendarEvents()
         return events.map { event ->
-            val savedDefaults = if (event.isRepeating) {
-                defaultsRepository.getReminderDefaults(event.eventKey())
-            } else {
-                emptyMap()
-            }
-            event.toConfig(savedDefaults)
+            val eventKey = event.eventKey()
+            val savedDefaults = defaultsRepository.getReminderDefaults(eventKey)
+            val customReminders = defaultsRepository.getCustomReminders(eventKey)
+            event.toConfig(savedDefaults, customReminders)
         }
     }
-    fun AlarmingCalendarEvent.toConfig(savedDefaults: Map<Int, ReminderStatus>)= CalendarAlarmConfig (
-        title=this.title,
-        startTime=this.startTime,
+
+    fun AlarmingCalendarEvent.toConfig(
+        savedDefaults: Map<Int, ReminderStatus>,
+        customReminders: List<StoredCustomReminder>,
+    ) = CalendarAlarmConfig(
+        title = this.title,
+        startTime = this.startTime,
         calendarName = this.calendarName,
 
-        id=this.id,
-        originalId=this.originalId,
-        eventId=this.eventId,
-        syncId=this.syncId,
-        isRepeating=this.isRepeating,
-        status =CalendarAlarmStatus.DEFAULT,
-        reminders =this.reminderMinutes.map { minutes ->
-            val defaultStatus = savedDefaults[minutes] ?: ReminderStatus.DEFAULT_OFF
-            ReminderConfig(
-                minutes = minutes,
-                status = defaultStatus,
-                defaultStatus = defaultStatus,
-                originalDefaultStatus = defaultStatus,
-            )
-        }
+        id = this.id,
+        originalId = this.originalId,
+        eventId = this.eventId,
+        syncId = this.syncId,
+        isRepeating = this.isRepeating,
+        status = CalendarAlarmStatus.DEFAULT,
+        reminders = buildReminders(
+            calendarMinutes = this.reminderMinutes,
+            customReminders = customReminders,
+            savedDefaults = savedDefaults,
+            isRepeating = this.isRepeating,
+        ),
     )
 }
+
+/**
+ * Merges the calendar's own reminder minutes with the app-added custom reminders,
+ * sorted by minutes and de-duplicated.
+ */
+internal fun buildReminders(
+    calendarMinutes: List<Int>,
+    customReminders: List<StoredCustomReminder>,
+    savedDefaults: Map<Int, ReminderStatus>,
+    isRepeating: Boolean,
+): List<ReminderConfig> {
+    val customByMinutes = customReminders.associateBy { it.minutes }
+    val allMinutes = (calendarMinutes + customReminders.map { it.minutes }).distinct().sorted()
+    return allMinutes.map { minutes ->
+        val isCustom = minutes in customByMinutes && minutes !in calendarMinutes
+        val defaultStatus = when {
+            isCustom && isRepeating -> customByMinutes.getValue(minutes).defaultStatus
+            isCustom -> ReminderStatus.ON_THIS_TIME
+            else -> savedDefaults[minutes] ?: ReminderStatus.DEFAULT_OFF
+        }
+        ReminderConfig(
+            minutes = minutes,
+            status = defaultStatus,
+            defaultStatus = defaultStatus,
+            originalDefaultStatus = defaultStatus,
+            isCustom = isCustom,
+        )
+    }
+}
+
+/** Epoch millis at the start of the local day containing [now]. */
+internal fun startOfTodayMillis(now: Long, zoneId: ZoneId = ZoneId.systemDefault()): Long =
+    Instant.ofEpochMilli(now)
+        .atZone(zoneId)
+        .toLocalDate()
+        .atStartOfDay(zoneId)
+        .toInstant()
+        .toEpochMilli()
 
 internal fun AlarmingCalendarEvent.eventKey(): String =
     originalId.takeIf { it.isNotBlank() } ?: eventId

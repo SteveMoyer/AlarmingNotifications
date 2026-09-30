@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,15 +18,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
@@ -92,11 +97,53 @@ class TodaysEventsActivity : ComponentActivity() {
         }
     }
 
+    private fun addCustomReminder(eventId: String, minutes: Int) {
+        val event = events.firstOrNull { it.id == eventId } ?: return
+        if (!isValidCustomReminder(minutes, event.reminders.map { it.minutes })) return
+        val status = if (event.isRepeating) ReminderStatus.RECURRING_ON else ReminderStatus.ON_THIS_TIME
+        val reminder = ReminderConfig(
+            minutes = minutes,
+            status = status,
+            defaultStatus = status,
+            originalDefaultStatus = status,
+            isCustom = true,
+        )
+        events = events.map { current ->
+            if (current.id != eventId) {
+                current
+            } else {
+                current.copy(reminders = (current.reminders + reminder).sortedBy { it.minutes })
+            }
+        }
+        val singleEventDate = if (event.isRepeating) 0L else event.startTime
+        lifecycleScope.launch {
+            defaultsRepository.addCustomReminder(event.eventKey(), minutes, singleEventDate)
+        }
+    }
+
+    private fun removeCustomReminder(eventId: String, reminderIndex: Int) {
+        val event = events.firstOrNull { it.id == eventId } ?: return
+        val reminder = event.reminders.getOrNull(reminderIndex) ?: return
+        if (!reminder.isCustom) return
+        events = events.map { current ->
+            if (current.id != eventId) {
+                current
+            } else {
+                current.copy(
+                    reminders = current.reminders.filterIndexed { index, _ -> index != reminderIndex }
+                )
+            }
+        }
+        lifecycleScope.launch {
+            defaultsRepository.removeCustomReminder(event.eventKey(), reminder.minutes)
+        }
+    }
+
     private fun saveReminderDefaults() {
         lifecycleScope.launch {
             events.forEach { event ->
                 if (!event.isRepeating) return@forEach
-                val eventKey = event.originalId.takeIf { it.isNotBlank() } ?: event.eventId
+                val eventKey = event.eventKey()
                 event.reminders.forEach { reminder ->
                     if (reminder.defaultStatus == reminder.originalDefaultStatus) return@forEach
                     when (reminder.defaultStatus) {
@@ -170,6 +217,12 @@ class TodaysEventsActivity : ComponentActivity() {
                             onReminderStatusSelected = { eventId, reminderIndex, status ->
                                 setReminderStatus(eventId, reminderIndex, status)
                             },
+                            onAddReminder = { eventId, minutes ->
+                                addCustomReminder(eventId, minutes)
+                            },
+                            onRemoveReminder = { eventId, reminderIndex ->
+                                removeCustomReminder(eventId, reminderIndex)
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         ScheduledAlarmList(sortedAlarms)
@@ -223,6 +276,12 @@ internal fun applyReminderSelection(reminder: ReminderConfig, selection: Reminde
         else -> reminder.copy(status = selection)
     }
 
+internal fun isValidCustomReminder(minutes: Int, existingMinutes: Collection<Int>): Boolean =
+    minutes > 0 && minutes !in existingMinutes
+
+internal fun CalendarAlarmConfig.eventKey(): String =
+    originalId.takeIf { it.isNotBlank() } ?: eventId
+
 @Preview
 @Composable
 fun CalendarList(@PreviewParameter(PreviewCalendarProvider::class) calendars: List<AlarmingCalendar>, modifier: Modifier = Modifier) {
@@ -254,11 +313,13 @@ fun EventList(
     @PreviewParameter(PreviewEventProvider::class) events: List<CalendarAlarmConfig>,
     scheduledKeys: Set<Pair<String, Int>> = emptySet(),
     onReminderStatusSelected: (eventId: String, reminderIndex: Int, status: ReminderStatus) -> Unit = { _, _, _ -> },
+    onAddReminder: (eventId: String, minutes: Int) -> Unit = { _, _ -> },
+    onRemoveReminder: (eventId: String, reminderIndex: Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         events.forEach { event ->
-            EventItem(event, scheduledKeys, onReminderStatusSelected)
+            EventItem(event, scheduledKeys, onReminderStatusSelected, onAddReminder, onRemoveReminder)
         }
     }
 }
@@ -267,8 +328,11 @@ fun EventList(
 fun EventItem(
     event: CalendarAlarmConfig,
     scheduledKeys: Set<Pair<String, Int>> = emptySet(),
-    onReminderStatusSelected: (eventId: String, reminderIndex: Int, status: ReminderStatus) -> Unit,
+    onReminderStatusSelected: (eventId: String, reminderIndex: Int, status: ReminderStatus) -> Unit = { _, _, _ -> },
+    onAddReminder: (eventId: String, minutes: Int) -> Unit = { _, _ -> },
+    onRemoveReminder: (eventId: String, reminderIndex: Int) -> Unit = { _, _ -> },
 ) {
+    var showAddDialog by remember { mutableStateOf(false) }
 
     ListItem(
         headlineContent = { Text("${formatTime(event.startTime)} - ${event.title}")},
@@ -280,11 +344,80 @@ fun EventItem(
                     reminder,
                     isRepeating = event.isRepeating,
                     isScheduled = (event.id to reminder.minutes) in scheduledKeys,
-                    onStatusSelected = { status -> onReminderStatusSelected(event.id, index, status) }
+                    onStatusSelected = { status -> onReminderStatusSelected(event.id, index, status) },
+                    onRemove = { onRemoveReminder(event.id, index) },
                 )
             }
+            AssistChip(
+                onClick = { showAddDialog = true },
+                label = { Text("+") },
+            )
         }
         }
+    )
+
+    if (showAddDialog) {
+        AddReminderDialog(
+            existingMinutes = event.reminders.map { it.minutes },
+            onDismiss = { showAddDialog = false },
+            onConfirm = { minutes ->
+                onAddReminder(event.id, minutes)
+                showAddDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+fun AddReminderDialog(
+    existingMinutes: List<Int>,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    val minutes = text.toIntOrNull()
+    val valid = minutes != null && isValidCustomReminder(minutes, existingMinutes)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add reminder") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { newValue -> text = newValue.filter { it.isDigit() } },
+                    label = { Text("Minutes before event") },
+                    singleLine = true,
+                    isError = text.isNotEmpty() && !valid,
+                )
+                Row(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    listOf(5, 10, 15, 30, 60).forEach { preset ->
+                        AssistChip(
+                            onClick = { text = preset.toString() },
+                            label = { Text("$preset") },
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { minutes?.let(onConfirm) },
+                enabled = valid,
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
     )
 }
 
@@ -294,6 +427,7 @@ fun AlarmItem(
     isRepeating: Boolean,
     isScheduled: Boolean = false,
     onStatusSelected: (ReminderStatus) -> Unit,
+    onRemove: () -> Unit = {},
 ) {
     val selected = reminder.status.shouldCreateAlarm()
     val (icon, contentDescription) = when (reminder.status) {
@@ -361,6 +495,15 @@ fun AlarmItem(
                     onClick = {
                         expanded = false
                         onStatusSelected(option)
+                    }
+                )
+            }
+            if (reminder.isCustom) {
+                DropdownMenuItem(
+                    text = { Text("Remove reminder") },
+                    onClick = {
+                        expanded = false
+                        onRemove()
                     }
                 )
             }

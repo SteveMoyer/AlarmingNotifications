@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.fischman.alarmingnotifications.gcal.RecurringEventDefaultsCollection
 import org.fischman.alarmingnotifications.gcal.RecurringReminderDefaultsRepository
 import org.fischman.alarmingnotifications.gcal.ReminderStatus
+import org.fischman.alarmingnotifications.gcal.StoredCustomReminder
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -99,5 +100,92 @@ class DataStoreRecurringReminderDefaultsRepositoryTest {
     @Test(expected = IllegalArgumentException::class)
     fun savingNonRecurringDefaultThrows() = runTest {
         repository.saveReminderDefault("event1", 10, ReminderStatus.ON_THIS_TIME)
+    }
+
+    @Test
+    fun addAndRetrieveCustomReminder() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+
+        assertEquals(
+            listOf(StoredCustomReminder(45, ReminderStatus.RECURRING_ON)),
+            repository.getCustomReminders("event1")
+        )
+        assertEquals(emptyMap<Int, ReminderStatus>(), repository.getReminderDefaults("event1"))
+    }
+
+    @Test
+    fun addCustomReminderIsIdempotent() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+
+        assertEquals(1, repository.getCustomReminders("event1").size)
+    }
+
+    @Test
+    fun removeCustomReminder() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+        repository.removeCustomReminder("event1", 45)
+
+        assertEquals(emptyList<StoredCustomReminder>(), repository.getCustomReminders("event1"))
+    }
+
+    @Test
+    fun saveReminderDefaultPreservesCustomFlag() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+        repository.saveReminderDefault("event1", 45, ReminderStatus.RECURRING_OFF)
+
+        assertEquals(
+            listOf(StoredCustomReminder(45, ReminderStatus.RECURRING_OFF)),
+            repository.getCustomReminders("event1")
+        )
+        assertEquals(emptyMap<Int, ReminderStatus>(), repository.getReminderDefaults("event1"))
+    }
+
+    @Test
+    fun deleteReminderDefaultKeepsCustomReminders() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+        repository.saveReminderDefault("event1", 10, ReminderStatus.RECURRING_ON)
+        repository.deleteReminderDefault("event1", 10)
+
+        assertEquals(emptyMap<Int, ReminderStatus>(), repository.getReminderDefaults("event1"))
+        assertEquals(
+            listOf(StoredCustomReminder(45, ReminderStatus.RECURRING_ON)),
+            repository.getCustomReminders("event1")
+        )
+    }
+
+    @Test
+    fun pruneExpiredCustomRemindersRemovesPastSingleEvent() = runTest {
+        val eventDate = 1_000_000L
+        repository.addCustomReminder("event1", 45, singleEventDate = eventDate)
+
+        repository.pruneExpiredCustomReminders(before = eventDate + 1)
+
+        assertEquals(emptyList<StoredCustomReminder>(), repository.getCustomReminders("event1"))
+    }
+
+    @Test
+    fun pruneExpiredCustomRemindersKeepsFutureSingleEvent() = runTest {
+        val eventDate = 1_000_000L
+        repository.addCustomReminder("event1", 45, singleEventDate = eventDate)
+
+        repository.pruneExpiredCustomReminders(before = eventDate)
+
+        assertEquals(
+            listOf(StoredCustomReminder(45, ReminderStatus.RECURRING_ON)),
+            repository.getCustomReminders("event1")
+        )
+    }
+
+    @Test
+    fun pruneExpiredCustomRemindersKeepsRepeatingEvents() = runTest {
+        repository.addCustomReminder("event1", 45, singleEventDate = 0L)
+
+        repository.pruneExpiredCustomReminders(before = Long.MAX_VALUE)
+
+        assertEquals(
+            listOf(StoredCustomReminder(45, ReminderStatus.RECURRING_ON)),
+            repository.getCustomReminders("event1")
+        )
     }
 }
