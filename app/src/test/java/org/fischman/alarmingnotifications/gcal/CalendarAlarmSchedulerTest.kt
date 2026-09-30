@@ -178,6 +178,8 @@ private class FakeScheduledAlarmRepository : ScheduledAlarmRepository {
 
     override suspend fun getAll(): List<ScheduledAlarm> = alarms
 
+    override fun observeAll() = kotlinx.coroutines.flow.flowOf(alarms)
+
     override suspend fun replaceAll(alarms: List<ScheduledAlarm>) {
         this.alarms = alarms
     }

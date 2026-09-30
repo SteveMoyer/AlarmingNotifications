@@ -1,7 +1,9 @@
 package org.fischman.alarmingnotifications.gcal.datastore
 
 import androidx.datastore.core.DataStore
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import org.fischman.alarmingnotifications.gcal.ScheduledAlarm
 import org.fischman.alarmingnotifications.gcal.ScheduledAlarmCollection
 import org.fischman.alarmingnotifications.gcal.ScheduledAlarmEntry
@@ -12,7 +14,13 @@ class DataStoreScheduledAlarmRepository(
 ) : ScheduledAlarmRepository {
 
     override suspend fun getAll(): List<ScheduledAlarm> {
-        return dataStore.data.first().alarmsList.map { it.toDomain() }
+        return observeAll().first()
+    }
+
+    override fun observeAll(): Flow<List<ScheduledAlarm>> {
+        return dataStore.data.map { collection ->
+            collection.alarmsList.map { it.toDomain() }
+        }
     }
 
     override suspend fun replaceAll(alarms: List<ScheduledAlarm>) {

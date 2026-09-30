@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.fischman.alarmingnotifications.gcal.ScheduledAlarm
 import org.fischman.alarmingnotifications.gcal.ScheduledAlarmCollection
@@ -43,6 +44,16 @@ class DataStoreScheduledAlarmRepositoryTest {
     @Test
     fun returnsEmptyWhenNothingSaved() = runTest {
         assertEquals(emptyList<ScheduledAlarm>(), repository.getAll())
+    }
+
+    @Test
+    fun observeAllEmitsUpdates() = runTest {
+        assertEquals(emptyList<ScheduledAlarm>(), repository.observeAll().first())
+
+        val alarms = listOf(ScheduledAlarm("event1", 10, "Team Sync", 1_000L))
+        repository.replaceAll(alarms)
+
+        assertEquals(alarms, repository.observeAll().first())
     }
 
     @Test
