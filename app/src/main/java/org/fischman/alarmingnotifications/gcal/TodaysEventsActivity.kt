@@ -211,12 +211,13 @@ class TodaysEventsActivity : ComponentActivity() {
                 val scheduledKeys = scheduledReminderKeys(scheduledAlarms)
                 val sortedAlarms = alarmsByTriggerTime(scheduledAlarms)
                 val filteredEvents = filterEventsByExcludedCalendars(events, excludedCalendarIds)
+                val selectedCalendarCount = calendars.count { it.id !in excludedCalendarIds }
                 var calendarsExpanded by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
                         CollapsibleSection(
-                            title = "Available Calendars",
+                            title = "Available Calendars ($selectedCalendarCount/${calendars.size})",
                             expanded = calendarsExpanded,
                             onToggle = { calendarsExpanded = !calendarsExpanded },
                         ) {
