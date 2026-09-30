@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Today
 
@@ -48,7 +51,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
@@ -192,18 +197,21 @@ class TodaysEventsActivity : ComponentActivity() {
                 }
                 val scheduledKeys = scheduledReminderKeys(scheduledAlarms)
                 val sortedAlarms = alarmsByTriggerTime(scheduledAlarms)
+                var calendarsExpanded by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-                        Text(
-                            "Available Calendars",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(16.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                        CalendarList(calendars)
+                        CollapsibleSection(
+                            title = "Available Calendars",
+                            expanded = calendarsExpanded,
+                            onToggle = { calendarsExpanded = !calendarsExpanded },
+                        ) {
+                            CalendarList(calendars)
+                        }
 
                         HorizontalDivider()
+
+                        ScheduledAlarmList(sortedAlarms)
 
                         Text(
                             "Today's Events",
@@ -225,7 +233,6 @@ class TodaysEventsActivity : ComponentActivity() {
                             },
                             modifier = Modifier.weight(1f)
                         )
-                        ScheduledAlarmList(sortedAlarms)
                         Button(
                             onClick = { saveReminderDefaults() },
                             modifier = Modifier.fillMaxWidth().padding(16.dp)
@@ -281,6 +288,39 @@ internal fun isValidCustomReminder(minutes: Int, existingMinutes: Collection<Int
 
 internal fun CalendarAlarmConfig.eventKey(): String =
     originalId.takeIf { it.isNotBlank() } ?: eventId
+
+@Composable
+fun CollapsibleSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+            )
+        }
+        if (expanded) {
+            content()
+        }
+    }
+}
 
 @Preview
 @Composable
