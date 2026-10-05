@@ -49,9 +49,13 @@ class DailyAlarmConfigReader(
     )
 }
 
+/** Minutes before an event that represents an alarm at the event start time. */
+internal const val AT_START_MINUTES = 0
+
 /**
  * Merges the calendar's own reminder minutes with the app-added custom reminders,
- * sorted by minutes and de-duplicated.
+ * sorted by minutes and de-duplicated. An at-start reminder ([AT_START_MINUTES]) is
+ * always included so every event offers an alarm at its start time.
  */
 internal fun buildReminders(
     calendarMinutes: List<Int>,
@@ -60,7 +64,8 @@ internal fun buildReminders(
     isRepeating: Boolean,
 ): List<ReminderConfig> {
     val customByMinutes = customReminders.associateBy { it.minutes }
-    val allMinutes = (calendarMinutes + customReminders.map { it.minutes }).distinct().sorted()
+    val allMinutes =
+        (calendarMinutes + customReminders.map { it.minutes } + AT_START_MINUTES).distinct().sorted()
     return allMinutes.map { minutes ->
         val isCustom = minutes in customByMinutes && minutes !in calendarMinutes
         val defaultStatus = when {

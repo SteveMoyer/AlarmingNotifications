@@ -528,7 +528,10 @@ fun AlarmItem(
         FilterChip(
             onClick = { expanded = true },
             label = {
-                Text("${reminder.minutes} mins")
+                Text(
+                    if (reminder.minutes == AT_START_MINUTES) "At start"
+                    else "${reminder.minutes} mins"
+                )
             },
             selected = selected,
             leadingIcon = {
@@ -605,8 +608,11 @@ fun ScheduledAlarmList(alarms: List<ScheduledAlarm>, modifier: Modifier = Modifi
                     .verticalScroll(rememberScrollState())
             ) {
                 alarms.forEach { alarm ->
+                    val timing =
+                        if (alarm.minutes == AT_START_MINUTES) "at start"
+                        else "${alarm.minutes} min before"
                     Text(
-                        "${formatTime(alarm.triggerAt)} - ${alarm.label} (${alarm.minutes} min before)",
+                        "${formatTime(alarm.triggerAt)} - ${alarm.label} ($timing)",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )

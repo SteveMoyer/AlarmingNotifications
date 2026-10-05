@@ -66,6 +66,23 @@ class CalendarAlarmSchedulerTest {
     }
 
     @Test
+    fun schedulesAtStartReminderExactlyAtEventStart() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+
+        scheduler().scheduleAlarms(
+            listOf(event(startTime, listOf(ReminderConfig(minutes = 0, status = ReminderStatus.ON_THIS_TIME))))
+        )
+
+        val scheduled = shadowAlarmManager.scheduledAlarms
+        assertEquals(1, scheduled.size)
+        assertEquals(startTime, scheduled[0].triggerAtTime)
+        assertEquals(
+            listOf(ScheduledAlarm("event1", 0, "Team Sync", startTime)),
+            repository.alarms
+        )
+    }
+
+    @Test
     fun skipsRemindersThatAreNotOn() = runTest {
         val startTime = System.currentTimeMillis() + 3_600_000
 

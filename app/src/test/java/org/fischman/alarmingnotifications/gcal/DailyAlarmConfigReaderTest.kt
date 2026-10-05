@@ -91,11 +91,13 @@ class DailyAlarmConfigReaderTest {
         assertEquals(1, events.size)
         assertEquals(1L, events[0].calendarId)
         val reminders = events[0].reminders
-        assertEquals(listOf(10, 45), reminders.map { it.minutes })
+        assertEquals(listOf(0, 10, 45), reminders.map { it.minutes })
         assertFalse(reminders[0].isCustom)
         assertEquals(ReminderStatus.DEFAULT_OFF, reminders[0].status)
-        assertTrue(reminders[1].isCustom)
-        assertEquals(ReminderStatus.RECURRING_ON, reminders[1].status)
+        assertFalse(reminders[1].isCustom)
+        assertEquals(ReminderStatus.DEFAULT_OFF, reminders[1].status)
+        assertTrue(reminders[2].isCustom)
+        assertEquals(ReminderStatus.RECURRING_ON, reminders[2].status)
     }
 
     @Test
@@ -112,9 +114,9 @@ class DailyAlarmConfigReaderTest {
         val events = reader.fetchDefaultDailyAlarmConfig()
 
         val reminders = events[0].reminders
-        assertEquals(listOf(45), reminders.map { it.minutes })
-        assertTrue(reminders[0].isCustom)
-        assertEquals(ReminderStatus.ON_THIS_TIME, reminders[0].status)
+        assertEquals(listOf(0, 45), reminders.map { it.minutes })
+        assertTrue(reminders[1].isCustom)
+        assertEquals(ReminderStatus.ON_THIS_TIME, reminders[1].status)
     }
 
     @Test
@@ -130,7 +132,7 @@ class DailyAlarmConfigReaderTest {
 
         val events = reader.fetchDefaultDailyAlarmConfig()
 
-        val reminder = events[0].reminders.single()
+        val reminder = events[0].reminders.single { it.minutes == 10 }
         assertFalse(reminder.isCustom)
         assertEquals(ReminderStatus.RECURRING_OFF, reminder.status)
     }

@@ -18,13 +18,42 @@ class ReminderConfigBuildingTest {
             isRepeating = true,
         )
 
-        assertEquals(listOf(10, 30, 45), reminders.map { it.minutes })
-        assertEquals(ReminderStatus.RECURRING_OFF, reminders[0].status)
-        assertEquals(ReminderStatus.DEFAULT_OFF, reminders[1].status)
-        assertEquals(ReminderStatus.RECURRING_ON, reminders[2].status)
+        assertEquals(listOf(0, 10, 30, 45), reminders.map { it.minutes })
+        assertEquals(ReminderStatus.DEFAULT_OFF, reminders[0].status)
+        assertEquals(ReminderStatus.RECURRING_OFF, reminders[1].status)
+        assertEquals(ReminderStatus.DEFAULT_OFF, reminders[2].status)
+        assertEquals(ReminderStatus.RECURRING_ON, reminders[3].status)
         assertFalse(reminders[0].isCustom)
         assertFalse(reminders[1].isCustom)
-        assertTrue(reminders[2].isCustom)
+        assertFalse(reminders[2].isCustom)
+        assertTrue(reminders[3].isCustom)
+    }
+
+    @Test
+    fun alwaysIncludesAtStartReminderDefaultingToOff() {
+        val reminders = buildReminders(
+            calendarMinutes = emptyList(),
+            customReminders = emptyList(),
+            savedDefaults = emptyMap(),
+            isRepeating = false,
+        )
+
+        assertEquals(1, reminders.size)
+        assertEquals(AT_START_MINUTES, reminders[0].minutes)
+        assertEquals(ReminderStatus.DEFAULT_OFF, reminders[0].status)
+        assertFalse(reminders[0].isCustom)
+    }
+
+    @Test
+    fun atStartReminderUsesSavedDefaultForRepeatingEvent() {
+        val reminders = buildReminders(
+            calendarMinutes = emptyList(),
+            customReminders = emptyList(),
+            savedDefaults = mapOf(AT_START_MINUTES to ReminderStatus.RECURRING_ON),
+            isRepeating = true,
+        )
+
+        assertEquals(ReminderStatus.RECURRING_ON, reminders[0].status)
     }
 
     @Test
@@ -36,9 +65,11 @@ class ReminderConfigBuildingTest {
             isRepeating = false,
         )
 
-        assertEquals(1, reminders.size)
-        assertEquals(ReminderStatus.ON_THIS_TIME, reminders[0].status)
-        assertTrue(reminders[0].isCustom)
+        assertEquals(2, reminders.size)
+        assertEquals(AT_START_MINUTES, reminders[0].minutes)
+        assertEquals(45, reminders[1].minutes)
+        assertEquals(ReminderStatus.ON_THIS_TIME, reminders[1].status)
+        assertTrue(reminders[1].isCustom)
     }
 
     @Test
@@ -50,7 +81,8 @@ class ReminderConfigBuildingTest {
             isRepeating = true,
         )
 
-        assertEquals(ReminderStatus.RECURRING_OFF, reminders[0].status)
+        assertEquals(45, reminders[1].minutes)
+        assertEquals(ReminderStatus.RECURRING_OFF, reminders[1].status)
     }
 
     @Test
@@ -62,8 +94,9 @@ class ReminderConfigBuildingTest {
             isRepeating = true,
         )
 
-        assertEquals(1, reminders.size)
+        assertEquals(listOf(0, 30), reminders.map { it.minutes })
         assertFalse(reminders[0].isCustom)
+        assertFalse(reminders[1].isCustom)
     }
 
     @Test
