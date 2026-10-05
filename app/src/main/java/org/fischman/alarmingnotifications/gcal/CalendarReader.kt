@@ -39,6 +39,7 @@ class AlarmingCalendarReader(private val context: Context) {
         val instancesProjection = arrayOf(
             CalendarContract.Instances.TITLE,
             CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.ALL_DAY,
             CalendarContract.Instances.RDATE,
             CalendarContract.Instances.RRULE,
 
@@ -75,6 +76,7 @@ class AlarmingCalendarReader(private val context: Context) {
         )?.use { cursor ->
             val titleColumn = cursor.getColumnIndex(CalendarContract.Instances.TITLE)
             val startColumn = cursor.getColumnIndex(CalendarContract.Instances.BEGIN)
+            val allDayColumn = cursor.getColumnIndex(CalendarContract.Instances.ALL_DAY)
             val calendarColumn = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
             val calendarIdColumn = cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_ID)
             val idColumn = cursor.getColumnIndex(CalendarContract.Instances._ID)
@@ -90,6 +92,9 @@ class AlarmingCalendarReader(private val context: Context) {
             val eventMap = mutableMapOf<String, AlarmingCalendarEvent>()
 
             while (cursor.moveToNext()) {
+                // Skip all-day events; they have no meaningful alarm time.
+                if (allDayColumn != -1 && cursor.getInt(allDayColumn) == 1) continue
+
                 val title = if (titleColumn != -1) cursor.getString(titleColumn) ?: "Untitled" else "Untitled"
                 val startTime = if (startColumn != -1) cursor.getLong(startColumn) else 0L
                 val calendarName = if (calendarColumn != -1) cursor.getString(calendarColumn) ?: "Unknown" else "Unknown"

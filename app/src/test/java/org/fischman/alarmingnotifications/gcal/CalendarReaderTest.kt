@@ -364,4 +364,63 @@ class CalendarReaderTest {
         assertEquals(1, events.size)
         assertEquals(42L, events[0].calendarId)
     }
+
+    @Test
+    fun testFetchCalendarEventsFiltersOutAllDayEvents() = runTest {
+        val cursor = MatrixCursor(arrayOf(
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.ALL_DAY,
+            CalendarContract.Instances.RDATE,
+            CalendarContract.Instances.RRULE,
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances.CALENDAR_ID,
+            CalendarContract.Instances._ID,
+            CalendarContract.Instances.ORIGINAL_ID,
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Events._SYNC_ID
+        ))
+
+        cursor.addRow(arrayOf(
+            "Holiday",
+            1725120000000L,
+            1,
+            null,
+            null,
+            "Work Calendar",
+            42L,
+            "1001",
+            "",
+            "",
+            "sync_abc"
+        ))
+        cursor.addRow(arrayOf(
+            "Standup",
+            1725123600000L,
+            0,
+            null,
+            null,
+            "Work Calendar",
+            42L,
+            "1002",
+            "",
+            "",
+            "sync_abc"
+        ))
+
+        every {
+            mockContentResolver.query(
+                any<Uri>(),
+                any<Array<String>>(),
+                null,
+                null,
+                "${CalendarContract.Instances.BEGIN} ASC"
+            )
+        } returns cursor
+
+        val events = reader.fetchCalendarEvents()
+
+        assertEquals(1, events.size)
+        assertEquals("Standup", events[0].title)
+    }
 }
