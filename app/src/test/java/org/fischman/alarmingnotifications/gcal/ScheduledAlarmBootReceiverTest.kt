@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
+import org.fischman.alarmingnotifications.AlarmSource
+import org.fischman.alarmingnotifications.setAlarmSource
 import org.fischman.alarmingnotifications.gcal.datastore.DataStoreScheduledAlarmRepository
 import org.fischman.alarmingnotifications.gcal.datastore.scheduledAlarmsDataStore
 import org.junit.After
@@ -35,6 +37,7 @@ class ScheduledAlarmBootReceiverTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         repository = DataStoreScheduledAlarmRepository(context.scheduledAlarmsDataStore)
         repository.replaceAll(emptyList())
+        setAlarmSource(context, AlarmSource.SCHEDULED)
     }
 
     @After
@@ -58,6 +61,19 @@ class ScheduledAlarmBootReceiverTest {
         restoreScheduledAlarms(context)
 
         assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+    }
+
+    @Test
+    fun restoreScheduledAlarmsNoOpWhenNotificationsSourceActive() = runTest {
+        setAlarmSource(context, AlarmSource.NOTIFICATIONS)
+        repository.replaceAll(
+            listOf(ScheduledAlarm("event1", 10, "Team Sync", System.currentTimeMillis() + 3_600_000))
+        )
+
+        restoreScheduledAlarms(context)
+
+        assertTrue(shadowAlarmManager.scheduledAlarms.isEmpty())
+        assertEquals(1, repository.getAll().size)
     }
 
     @Test

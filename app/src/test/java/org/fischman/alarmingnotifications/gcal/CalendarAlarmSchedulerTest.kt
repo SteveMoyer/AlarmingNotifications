@@ -163,6 +163,29 @@ class CalendarAlarmSchedulerTest {
     }
 
     @Test
+    fun cancelAllCancelsPendingAlarmsAndClearsRepository() = runTest {
+        val startTime = System.currentTimeMillis() + 3_600_000
+
+        scheduler().scheduleAlarms(
+            listOf(
+                event(
+                    startTime,
+                    listOf(
+                        ReminderConfig(minutes = 10, status = ReminderStatus.ON_THIS_TIME),
+                        ReminderConfig(minutes = 0, status = ReminderStatus.ON_THIS_TIME),
+                    )
+                )
+            )
+        )
+        assertEquals(2, shadowAlarmManager.scheduledAlarms.size)
+
+        scheduler().cancelAll()
+
+        assertTrue(shadowAlarmManager.scheduledAlarms.isEmpty())
+        assertTrue(repository.alarms.isEmpty())
+    }
+
+    @Test
     fun reschedulePersistedRegistersFutureAlarms() = runTest {
         val startTime = System.currentTimeMillis() + 3_600_000
         repository.alarms = listOf(

@@ -96,6 +96,21 @@ class NotificationFilterTest {
     }
 
     @Test
+    fun testCalendarNotificationNotInterestingWhenScheduledSourceActive() {
+        getSettingsSharedPreferences(service)
+            .edit()
+            .putString(alarmSourceKey, AlarmSource.SCHEDULED.name)
+            .apply()
+
+        val sbn = createMockSbn(
+            packageName = "com.google.android.calendar",
+            title = "Doctor Appointment",
+            text = "2:00 PM"
+        )
+        assertFalse("Calendar notification should be ignored when scheduled source is active", service.isInteresting(sbn))
+    }
+
+    @Test
     fun testNonWhitelistedPackageIsNotInteresting() {
         val sbn = createMockSbn(
             packageName = "com.example.unwantedapp",

@@ -81,6 +81,25 @@ class NotificationListenerIntegrationTest {
     }
 
     @Test
+    fun testOnNotificationPostedSuppressedWhenScheduledSourceActive() {
+        getSettingsSharedPreferences(context)
+            .edit()
+            .putString(alarmSourceKey, AlarmSource.SCHEDULED.name)
+            .apply()
+
+        val sbn = createSbn(
+            packageName = "com.google.android.calendar",
+            title = "Design Sync",
+            text = "1:00 PM",
+            key = "sbn_scheduled_1"
+        )
+
+        service.onNotificationPosted(sbn)
+
+        assertNull("TriggerAlarm service should NOT start when scheduled source is active", shadowApp.nextStartedService)
+    }
+
+    @Test
     fun testOnNotificationPostedSuppressedWhenTimeMuted() {
         muteForMinutes(context, 30)
 

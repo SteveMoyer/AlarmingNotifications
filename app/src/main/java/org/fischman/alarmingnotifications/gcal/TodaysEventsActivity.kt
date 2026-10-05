@@ -30,6 +30,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
@@ -61,6 +62,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import org.fischman.alarmingnotifications.AlarmSource
+import org.fischman.alarmingnotifications.getAlarmSource
 import org.fischman.alarmingnotifications.gcal.datastore.DataStoreRecurringReminderDefaultsRepository
 import org.fischman.alarmingnotifications.gcal.datastore.DataStoreScheduledAlarmRepository
 import org.fischman.alarmingnotifications.gcal.datastore.recurringReminderDefaultsDataStore
@@ -91,6 +94,9 @@ class TodaysEventsActivity : ComponentActivity() {
         private set
 
     private var excludedCalendarIds by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    private var alarmSource by mutableStateOf(AlarmSource.NOTIFICATIONS)
         private set
 
     private fun setCalendarSelected(calendarId: Long, selected: Boolean) {
@@ -186,6 +192,7 @@ class TodaysEventsActivity : ComponentActivity() {
     }
 
     private fun createAlarmsAndSave() {
+        if (alarmSource != AlarmSource.SCHEDULED) return
         saveReminderDefaults()
         val eventsToSchedule = filterEventsByExcludedCalendars(events, excludedCalendarIds)
         lifecycleScope.launch {
@@ -193,9 +200,15 @@ class TodaysEventsActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        alarmSource = getAlarmSource(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         excludedCalendarIds = calendarFilterRepository.getExcludedCalendarIds()
+        alarmSource = getAlarmSource(this)
         enableEdgeToEdge()
         setContent {
             AlarmingNotificationsTheme {
@@ -254,6 +267,20 @@ class TodaysEventsActivity : ComponentActivity() {
                             },
                             modifier = Modifier.weight(1f)
                         )
+                        if (alarmSource == AlarmSource.NOTIFICATIONS) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                            ) {
+                                Text(
+                                    "Alarms come from live notifications. Switch the alarm source " +
+                                        "to \"Calendar (scheduled)\" in Settings to create these alarms.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
                         Button(
                             onClick = { saveReminderDefaults() },
                             modifier = Modifier.fillMaxWidth().padding(16.dp)
@@ -262,6 +289,7 @@ class TodaysEventsActivity : ComponentActivity() {
                         }
                         Button(
                             onClick = { createAlarmsAndSave() },
+                            enabled = alarmSource == AlarmSource.SCHEDULED,
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                         ) {
                             Text("Create Alarms and Save")

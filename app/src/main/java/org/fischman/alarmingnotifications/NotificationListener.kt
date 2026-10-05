@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -21,13 +22,32 @@ import androidx.core.content.getSystemService
 
 class NotificationListener : NotificationListenerService() {
     private var originalNotificationKeyToAlarmingID: MutableMap<String, Int> = mutableMapOf()
+    private var sourceListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onListenerConnected() {
         log("onListenerConnected")
+        // The system may auto-bind us on boot even when scheduled alarms are the active source.
+        // Release the binding so we stop receiving notifications entirely.
+        if (getAlarmSource(this) == AlarmSource.SCHEDULED) {
+            requestUnbind()
+            return
+        }
         MuteStatusNotification.startWatching(this)
+
+        // Unbinding from outside the service requires API 34, so observe the source preference
+        // ourselves and release the binding when the user switches to scheduled alarms.
+        val prefs = getSettingsSharedPreferences(this)
+        sourceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == alarmSourceKey && getAlarmSource(this) == AlarmSource.SCHEDULED) {
+                requestUnbind()
+            }
+        }.also { prefs.registerOnSharedPreferenceChangeListener(it) }
     }
+
     override fun onListenerDisconnected() {
         log("onListenerDisconnected")
+        sourceListener?.let { getSettingsSharedPreferences(this).unregisterOnSharedPreferenceChangeListener(it) }
+        sourceListener = null
         MuteStatusNotification.stopWatching()
     }
 
@@ -49,6 +69,8 @@ class NotificationListener : NotificationListenerService() {
     }
 
     internal fun isInteresting(sbn: StatusBarNotification): Boolean {
+        if (getAlarmSource(this) == AlarmSource.SCHEDULED) return false
+
         val prefs = getSettingsSharedPreferences(this)
 
         // Ignore Keep Reminders, now surfaced as Tasks notifications from Calendar (when Tasks app isn't installed), unless disabled.
@@ -91,6 +113,8 @@ class NotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (getAlarmSource(this) == AlarmSource.SCHEDULED) return
+
         val mutedUntilStr = mutedUntil(this)
         if (mutedUntilStr != "") {
             log("Suppressing notification because muted until $mutedUntilStr")

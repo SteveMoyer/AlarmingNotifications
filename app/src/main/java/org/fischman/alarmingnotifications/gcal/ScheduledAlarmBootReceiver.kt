@@ -8,6 +8,8 @@ import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.fischman.alarmingnotifications.AlarmSource
+import org.fischman.alarmingnotifications.getAlarmSource
 import org.fischman.alarmingnotifications.gcal.datastore.DataStoreScheduledAlarmRepository
 import org.fischman.alarmingnotifications.gcal.datastore.scheduledAlarmsDataStore
 
@@ -36,6 +38,8 @@ internal fun isRestoreAction(action: String?): Boolean =
     action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_MY_PACKAGE_REPLACED
 
 internal suspend fun restoreScheduledAlarms(context: Context) {
+    if (getAlarmSource(context) != AlarmSource.SCHEDULED) return
+
     val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
         return

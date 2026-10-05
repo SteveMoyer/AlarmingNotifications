@@ -39,6 +39,24 @@ class CalendarAlarmScheduler(
         repository.replaceAll(scheduled)
     }
 
+    /** Cancels every persisted alarm and clears the persisted set. */
+    suspend fun cancelAll() {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        for (alarm in repository.getAll()) {
+            val intent = Intent(context, TriggerAlarm::class.java).apply {
+                data = Uri.parse("alarmingnotifications://schedule/${alarm.eventId}/${alarm.minutes}")
+            }
+            val pendingIntent = PendingIntent.getService(
+                context,
+                "${alarm.eventId}:${alarm.minutes}".hashCode(),
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            alarmManager.cancel(pendingIntent)
+        }
+        repository.replaceAll(emptyList())
+    }
+
     /**
      * Re-registers every persisted alarm that is still in the future, dropping any that have
      * already passed. Used after a reboot or app update, both of which clear pending alarms.

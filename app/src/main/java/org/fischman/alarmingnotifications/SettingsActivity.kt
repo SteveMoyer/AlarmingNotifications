@@ -77,6 +77,7 @@ fun SettingsScreen(prefs: SharedPreferences, onBack: () -> Unit) {
 
     var ignoreKeep by remember { mutableStateOf(prefs.getBoolean(ignoreKeepKey, true)) }
     var ignoreSuffix by remember { mutableStateOf(prefs.getString(ignoreSuffixKey, "/s") ?: "") }
+    var alarmSource by remember { mutableStateOf(getAlarmSource(context)) }
     val alarmPackages = remember {
         mutableStateListOf<String>().apply {
             addAll(prefs.getStringSet(alarmPackagesKey, defaultAlarmPackages) ?: defaultAlarmPackages)
@@ -126,6 +127,32 @@ fun SettingsScreen(prefs: SharedPreferences, onBack: () -> Unit) {
     }
 
     val topSectionItems = listOf<@Composable () -> Unit>(
+        { SectionHeader("Alarm Source") },
+        {
+            Text(
+                "Choose how alarms are triggered. Only one source is active at a time.",
+                fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)
+            )
+        },
+        {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AlarmSourceChip(
+                    label = "Notifications",
+                    selected = alarmSource == AlarmSource.NOTIFICATIONS,
+                ) {
+                    alarmSource = AlarmSource.NOTIFICATIONS
+                    scope.launch { switchAlarmSource(context, AlarmSource.NOTIFICATIONS) }
+                }
+                AlarmSourceChip(
+                    label = "Calendar (scheduled)",
+                    selected = alarmSource == AlarmSource.SCHEDULED,
+                ) {
+                    alarmSource = AlarmSource.SCHEDULED
+                    scope.launch { switchAlarmSource(context, AlarmSource.SCHEDULED) }
+                }
+            }
+        },
+        { Spacer(modifier = Modifier.height(24.dp)) },
         { SectionHeader("Notification Filters") },
         {
             Row(
@@ -286,6 +313,15 @@ fun SectionHeader(title: String) {
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@Composable
+fun AlarmSourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) }
     )
 }
 

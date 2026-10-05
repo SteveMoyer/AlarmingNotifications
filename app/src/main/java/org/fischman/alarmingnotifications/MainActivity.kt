@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.getSystemService
+import kotlinx.coroutines.launch
 import org.fischman.alarmingnotifications.gcal.TodaysEventsActivity
 
 class MainActivity : ComponentActivity() {
@@ -174,6 +175,8 @@ fun MainDashboard(
     muteCount: Int,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var alarmSource by remember { mutableStateOf(getAlarmSource(context)) }
 
     Scaffold { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -210,6 +213,14 @@ fun MainDashboard(
                     QuickMuteSection(context)
                     Spacer(modifier = Modifier.height(24.dp))
                     CustomMuteSection(context)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    AlarmSourceSection(
+                        alarmSource = alarmSource,
+                        onSourceSelected = { source ->
+                            alarmSource = source
+                            scope.launch { switchAlarmSource(context, source) }
+                        },
+                    )
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
@@ -295,6 +306,26 @@ fun MuteBadge(text: String, onRemove: () -> Unit) {
                     fontSize = 18.sp
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AlarmSourceSection(alarmSource: AlarmSource, onSourceSelected: (AlarmSource) -> Unit) {
+    Column {
+        Text("Alarm Source", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = alarmSource == AlarmSource.NOTIFICATIONS,
+                onClick = { onSourceSelected(AlarmSource.NOTIFICATIONS) },
+                label = { Text("Notifications") },
+            )
+            FilterChip(
+                selected = alarmSource == AlarmSource.SCHEDULED,
+                onClick = { onSourceSelected(AlarmSource.SCHEDULED) },
+                label = { Text("Calendar (scheduled)") },
+            )
         }
     }
 }
