@@ -58,7 +58,7 @@ class AlarmingCalendarReader(private val context: Context) {
             set(Calendar.MILLISECOND, 0)
         }
         val startOfDay = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_YEAR, 2)
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
         val endOfDay = calendar.timeInMillis
 
         // Querying events that start during the current day

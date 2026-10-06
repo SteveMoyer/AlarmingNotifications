@@ -1,5 +1,7 @@
 package org.fischman.alarmingnotifications.gcal
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -427,6 +429,7 @@ fun EventList(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EventItem(
     event: CalendarAlarmConfig,
@@ -440,7 +443,7 @@ fun EventItem(
     ListItem(
         headlineContent = { Text("${formatTime(event.startTime)} - ${event.title}")},
         supportingContent = {
-            Row {
+            FlowRow {
             Text("Alarms:  ")
             event.reminders.forEachIndexed { index, reminder ->
                 AlarmItem(
